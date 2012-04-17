@@ -1,0 +1,84 @@
+Const SOUND_THRUST      = 0
+Const SOUND_LASER1      = 1
+Const SOUND_LASER2      = 2
+Const SOUND_LASER3      = 3
+Const SOUND_LASER4      = 4
+Const SOUND_LASER5      = 5
+Const SOUND_HIT1        = 6
+Const SOUND_HIT2        = 7
+Const SOUND_HIT3        = 8
+Const SOUND_ENEDIE1     = 9
+Const SOUND_ENEDIE2     = 10
+Const SOUND_MENU1       = 11
+Const SOUND_MENU2       = 12
+Const SOUND_MONEY       = 13
+Const SOUND_PLYDIE      = 14
+Const SOUND_PWUP1       = 15
+Const SOUND_PWUP2       = 16
+Const SOUND_SELECT      = 17
+Const SOUND_SELECT2     = 18
+Const SOUND_LEVELUP     = 19
+Const SOUND_MOBJDIE1    = 20
+Const SOUND_MOBJDIE2    = 21
+
+Const SOUND_TOTAL       = 22
+
+Const MAX_CHANNELS=32
+
+Global gSfxVolume, gMsxVolume
+gSfxVolume=iniReadInt(CONFIG_INI, "sound", "sfxvol", 60)
+gMsxVolume=iniReadInt(CONFIG_INI, "sound", "msxvol", 60)
+Global gMusic
+
+Dim aSound(SOUND_TOTAL)
+Dim aChannel(MAX_CHANNELS)
+
+gTotalItems=gTotalItems+SOUND_TOTAL
+aSound(SOUND_THRUST)=LoadSound("sfx\thrust2.ogg"):UpdateLoading("sfx/thrust2.ogg")
+aSound(SOUND_LASER1)=LoadSound("sfx\laser1.ogg"):UpdateLoading("sfx/laser1.ogg")
+aSound(SOUND_LASER2)=LoadSound("sfx\laser2.ogg"):UpdateLoading("sfx/laser2.ogg")
+aSound(SOUND_LASER3)=LoadSound("sfx\laser3.ogg"):UpdateLoading("sfx/laser3.ogg")
+aSound(SOUND_LASER4)=LoadSound("sfx\laser4.ogg"):UpdateLoading("sfx/laser4.ogg")
+aSound(SOUND_LASER5)=LoadSound("sfx\laser5.ogg"):UpdateLoading("sfx/laser5.ogg")
+aSound(SOUND_HIT1)=LoadSound("sfx\hit1.ogg"):UpdateLoading("sfx/hit1.ogg")
+aSound(SOUND_HIT2)=LoadSound("sfx\hit2.ogg"):UpdateLoading("sfx/hit2.ogg")
+aSound(SOUND_HIT3)=LoadSound("sfx\hit3.ogg"):UpdateLoading("sfx/hit3.ogg")
+aSound(SOUND_ENEDIE1)=LoadSound("sfx\enedie.ogg"):UpdateLoading("sfx/enedie.ogg")
+aSound(SOUND_ENEDIE2)=LoadSound("sfx\enedie2.ogg"):UpdateLoading("sfx/enedie2.ogg")
+aSound(SOUND_MENU1)=LoadSound("sfx\menu1.ogg"):UpdateLoading("sfx/menu1.ogg")
+aSound(SOUND_MENU2)=LoadSound("sfx\menu2.ogg"):UpdateLoading("sfx/menu2.ogg")
+aSound(SOUND_MONEY)=LoadSound("sfx\money.ogg"):UpdateLoading("sfx/money.ogg")
+aSound(SOUND_PLYDIE)=LoadSound("sfx\plydie.ogg"):UpdateLoading("sfx/plydie.ogg")
+aSound(SOUND_PWUP1)=LoadSound("sfx\pwup1.ogg"):UpdateLoading("sfx/pwup1.ogg")
+aSound(SOUND_PWUP2)=LoadSound("sfx\pwup2.ogg"):UpdateLoading("sfx/pwup2.ogg")
+aSound(SOUND_SELECT)=LoadSound("sfx\select.ogg"):UpdateLoading("sfx/select.ogg")
+aSound(SOUND_SELECT2)=LoadSound("sfx\select2.ogg"):UpdateLoading("sfx/select2.ogg")
+aSound(SOUND_LEVELUP)=LoadSound("sfx\levelup.ogg"):UpdateLoading("sfx/levelup.ogg")
+aSound(SOUND_MOBJDIE1)=LoadSound("sfx\mapobjdie1.ogg"):UpdateLoading("sfx/mapobjdie1.ogg")
+aSound(SOUND_MOBJDIE2)=LoadSound("sfx\mapobjdie2.ogg"):UpdateLoading("sfx/mapobjdie2.ogg")
+
+
+
+Function PlayGameSound(sound,_x=0,_y=0)
+    If sound=0 Then Return 0
+    For i=0 To MAX_CHANNELS-1
+        If SoundPlaying(aChannel(i))=OFF Then
+            volume# = (100 - Max(0, Distance(_x, _y, gCameraX, gCameraY) / 20)) / 100.0 * Float(gSfxVolume)
+            aChannel(i)=PlaySound(aSound(sound),volume)
+            Return 0
+        EndIf
+    Next i
+    temp=Rand(MAX_CHANNELS-1)
+    If SoundPlaying(aChannel(temp))=ON Then
+        StopSound aChannel(temp)
+        volume# = (100 - Max(0, Distance(_x, _y, gCameraX, gCameraY) / 20)) / 100.0 * Float(gSfxVolume)
+        aChannel(temp)=PlaySound(aSound(sound),volume)
+        Return -1
+    EndIf
+EndFunction
+
+Function StopAllSounds()
+    For i=0 To MAX_CHANNELS-1
+        If SoundPlaying(aChannel(i))=ON Then StopSound aChannel(i)
+    Next i
+EndFunction

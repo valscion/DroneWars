@@ -1,0 +1,40 @@
+
+Function LoadIMG(filepath As String)
+
+    If Not FileExists(filepath) Then MakeError "File '"+filepath+"'"+Chr(10)+Chr(13)+"was Not found!"
+
+    f=OpenToRead(filepath)
+    If Not f Then MakeError "File could not be opened! (LoadIMG)"
+    
+    'Dimensions, create image
+    imgW=ReadByte(f)
+    imgH=ReadByte(f)
+    img=MakeImage(imgW,imgH)
+    
+    'Colors
+    colors=ReadByte(f)
+    
+    Dim _color(colors)
+    For i=0 To colors-1
+        _color(i)=(255 Shl 24 + ReadByte(f) Shl 16 + ReadByte(f) Shl 8 + ReadByte(f))
+    Next i
+    
+    'Pixels
+    Lock(Image(img))
+    For y=0 To imgH-1
+    For x=0 To imgW-1
+        PutPixel2 x,y,_color(ReadByte(f)),Image(img)
+    Next x
+    Next y
+    Unlock(Image(img))
+    
+    CloseFile f
+    
+    Return img
+EndFunction
+
+Function MaskIMG(img As Integer)
+    PickImageColor img,0,0
+    MaskImage img,getRGB(RED),getRGB(GREEN),getRGB(BLUE)
+    Return img
+EndFunction

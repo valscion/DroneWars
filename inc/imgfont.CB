@@ -1,0 +1,109 @@
+Dim imgfont(256,2)
+For i=0 To 255
+    imgfont(i,0)=-1
+    imgfont(i,1)=-1
+Next i
+
+Global gImageFont_Image As Integer
+Global gImageFont_Shadow As Integer
+Global gImageFont_Width As Integer
+Global gImageFont_Height As Integer
+Global gImageFont_CWidth As Integer
+Global gImageFont_CHeight As Integer
+Global gImageFont_Order As String
+
+gImageFont_Image = LoadImage("gfx\font.png")
+gImageFont_Shadow = LoadImage("gfx\font2.png")
+gImageFont_Width = 16
+gImageFont_Height = 16
+gImageFont_CWidth = ImageWidth(gImageFont_Image)/16
+gImageFont_CHeight = ImageHeight(gImageFont_Image)/16
+
+MaskImage gImageFont_Shadow,255,0,255
+
+Function ImageFontInit()
+    x=0
+    y=0
+    gTotalItems=gTotalItems+16
+    For i=0 To 255
+        If x>gImageFont_Width-1 Then y+1:x=0
+        imgfont(i,0)=x*gImageFont_CWidth
+        imgfont(i,1)=y*gImageFont_CHeight
+        x+1
+        If (i Mod 16) = 0 Then UpdateLoading("image font")
+    Next i
+EndFunction
+
+Function ImageFontText(_text$,shadow=0)
+    If InStr(_text,"|")
+        height_y=CountWords2(_text,"|")
+        For i=1 To height_y
+            w=Max(Len(GetWord2(_text,i,"|")),w)
+        Next i
+    Else
+        height_y=1
+        w=Len(_text)+1
+    EndIf
+    
+    width=w*gImageFont_CWidth+(shadow*2)
+    height=height_y*gImageFont_CHeight+(shadow*2)
+    img=MakeImage(width,height)
+    MaskImage img,1,1,1
+    
+    DrawToImage img
+        Color 1,1,1
+        Box 0,0,width,height
+        For dy=1 To height_y
+            sent$=GetWord2(_text,dy,"|")
+            _len=Len(sent)
+            For i=1 To _len
+                char$=Mid(sent,i,1)
+                x=imgfont(Asc(char),0)
+                y=imgfont(Asc(char),1)
+                If x>-1 And y>-1 Then
+                    If shadow Then  
+                        DrawImageBox gImageFont_Shadow, 1+i*(gImageFont_CWidth), 1+(dy-1)*(gImageFont_CHeight),  x,y,  gImageFont_CWidth,gImageFont_CHeight
+                    EndIf
+                    DrawImageBox gImageFont_Image, i*(gImageFont_CWidth), (dy-1)*(gImageFont_CHeight),  x,y,  gImageFont_CWidth,gImageFont_CHeight
+                EndIf
+            Next i
+        Next dy
+    DrawToScreen
+    
+    Return img
+EndFunction
+
+ImageFontInit()
+
+'ESMES
+'test=ImageFontText("does this shit even work?!|*there's a quote here!*")
+'
+'DrawImage test,0,0
+'DrawScreen
+'WaitKey
+
+Function GetWord2$(stri$, index, separator$ = " ")
+    count_word = 1
+    word_begin = 1
+    pos = 0
+    Repeat
+        pos = InStr(stri, separator, pos+1)
+        word$ = Mid(stri, word_begin, pos-word_begin)
+        word_begin = pos+1
+        If index = count_word Then Return word
+        count_word + 1
+    Until pos = False
+    word = Mid(stri, word_begin, pos-word_begin)
+    If index = count_word Then Return word Else Return ""
+EndFunction
+
+Function CountWords2(a As String, c As String)
+   Repeat
+      n + 1 // Kasvatetaan arvoa, että montako ON löydetty
+      aa = InStr(a, c, aa + 1) // Katsotaan löytyykö erotinta
+      If Not aa Then // Jos ei löydy
+         Exit // Poistutaan
+      EndIf
+   Forever
+   Return n // Palautetaan esiintymien määrä
+EndFunction

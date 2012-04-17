@@ -1,0 +1,17 @@
+
+Global KEY_TURN_L
+Global KEY_TURN_R
+Global KEY_UP
+Global KEY_DOWN
+Global KEY_FIRE
+Global KEY_STRAFE_L
+Global KEY_STRAFE_R
+Function SetKeys()
+    KEY_TURN_L  =iniReadInt(CONFIG_INI,"keys","left",30)
+    KEY_TURN_R  =iniReadInt(CONFIG_INI,"keys","right",32)
+    KEY_UP      =iniReadInt(CONFIG_INI,"keys","up",17)
+    KEY_DOWN    =iniReadInt(CONFIG_INI,"keys","down",31)
+    KEY_FIRE    =iniReadInt(CONFIG_INI,"keys","fire",208)
+    KEY_STRAFE_L=iniReadInt(CONFIG_INI,"keys","strafel",203)
+    KEY_STRAFE_R=iniReadInt(CONFIG_INI,"keys","strafer",205)
+EndFunction

@@ -1,0 +1,96 @@
+
+Function MainMenu()
+    back:
+    main_back=LoadImage("gfx\menu_mainback.png")
+    main_hover=LoadImage("gfx\menu_mainhover.png")
+    main_diffiback=LoadImage("gfx\diffi1.png")
+    main_diffihover=LoadImage("gfx\diffi2.png")
+    
+    gMusic = PlaySound("sfx/dw-menu.xm",gMsxVolume)
+    
+    diffi_select=False
+    
+    Repeat
+    
+        If KeyHit(cbKeyUP) Then selection-1:PlayGameSound(SOUND_MENU1)
+        If KeyHit(cbKeyDOWN) Then selection+1:PlayGameSound(SOUND_MENU1)
+        If diffi_select=False
+            If selection>5 Then selection=0
+            If selection<0 Then selection=5
+        Else
+            If selection>3 Then selection=0
+            If selection<0 Then selection=3
+        EndIf
+        
+        If KeyHit(cbKeyReturn) Then
+            ClearKeys
+            If diffi_select=False
+                If selection=1 Or selection=3 Then
+                    PlayGameSound(SOUND_MENU2)
+                Else
+                    If selection=2 Then
+                        PlayGameSound(SOUND_SELECT):OptionsLoop(1)
+                    ElseIf selection=0
+                        PlayGameSound(SOUND_SELECT)
+                        diffi_select=True
+                    ElseIf selection=5
+                        End
+                    EndIf
+                EndIf
+            Else
+                PlayGameSound(SOUND_SELECT)
+                Select selection
+                    Case 0
+                        gDifficulty=3:Exit
+                    Case 1
+                        gDifficulty=2:Exit
+                    Case 2
+                        gDifficulty=1:Exit
+                    Case 3
+                        gDifficulty=0.7:Exit
+                EndSelect
+            EndIf
+        EndIf
+    
+        DrawImage main_back,0,0
+        
+        If diffi_select=False Then
+            DrawImageBox main_hover,102,114+selection*12,0,selection*12,116,12
+        Else
+            DrawImage main_diffiback,102,95
+            DrawImageBox main_diffihover,102,114+selection*12,0,selection*12,116,12
+        EndIf
+        
+        
+        DrawGame
+        PositionCamera 320, -240
+        For i = 240 To 0 Step -1
+            CopyBox 0, i, 320, 2, 0, i*2
+        Next i
+        
+        For i = 320 To 0 Step -1
+            CopyBox i,0,2,480,i*2,0
+        Next i
+        DrawScreen
+    Forever
+    DeleteImage main_back
+    DeleteImage main_hover
+    DeleteImage main_diffiback
+    DeleteImage main_diffihover
+    StopSound gMusic
+    
+    Return 4
+EndFunction
+
+
+Function ShopMenu()
+    shop_back=LoadImage("gfx\shop_back.png")
+    shop_hover=LoadImage("gfx\shop_hover.png")
+    
+    Repeat
+    
+        DrawImage shop_back,0,0
+        
+        DrawScreen
+    Forever
+EndFunction

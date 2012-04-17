@@ -1,0 +1,478 @@
+// --------------------------------- //
+//                                   //
+//             cbPacker              //
+//             by Valtzu             //
+//                                   //
+// --------------------------------- //
+
+Global gCurrentArchive As String, gErrorString As String
+
+Function SetArchive(arc$)
+    If Len( arc ) = 0 Then Return False
+    
+    If FileExists( arc ) = True Then
+        If FileSize( arc ) < 5 Then Return False
+        f = OpenToRead( arc )
+            arcFileHeader = ReadInt( f )
+        CloseFile f
+        If arcFileHeader <> 223363651 Then Return False
+    EndIf
+    
+    gCurrentArchive = arc
+End Function
+
+Function PackFile(file$,compress=1,arc$="")
+    // Tarkistetaan tiedoston olemassaolo
+    If FileExists(file) = False Then
+        gErrorString = "Invalid archive header"
+        Return False
+    EndIf
+    
+    // Jos arkiston nime‰ ei annettu, k‰ytet‰‰n oletusta
+    If Len( arc ) = 0 Then arc = gCurrentArchive
+    
+    // Jos oletusta ei ole, keskeytet‰‰n funktio
+    If Len( arc ) = 0 Then
+        gErrorString = "Archive Not found"
+        Return False
+    EndIf
+    
+    If FileExists( arc ) = False Then
+        f = OpenToWrite( arc )
+            WriteInt f, 223363651
+            WriteInt f, 0
+        CloseFile f
+    EndIf
+    
+    filelist  = GetFilelist( arc )
+    filec     = PeekInt(filelist, 0)
+    offs      = 4
+    For i = 1 To filec
+        filu$ = Lower(_PeekString(filelist,offs))
+        If filu = Lower(file) Then
+            DeleteMEMBlock filelist
+            gErrorString = "File '"+file+"' already exists in archive '"+arc+"'"
+            Return False
+        EndIf
+        offs = offs + 21 + Len(filu)
+    Next i
+    DeleteMEMBlock filelist
+    
+    fSize = FileSize(file)
+    
+    // Luodaan muistipala tiedostolle
+    fMem  = MakeMEMBlock( fSize + 4 )
+    
+    PokeInt fMem, 0, fSize
+    
+    fHandle = OpenToRead( file )
+    
+        // Luetaan tiedosto muistipalaan
+        For i=0 To ( fSize - (fSize Mod 4) ) / 4 - 1
+            PokeInt fMem, 4 + i * 4, ReadInt( fHandle )
+        Next i
+        For i=1 To (fSize Mod 4)
+            PokeByte fMem, 4 + fSize-1-(fSize Mod 4) + i, ReadByte( fHandle )
+        Next i
+    
+    CloseFile fHandle
+    
+    hash = Crc32( file )
+    
+    If compress Then pMem = _packMem( fMem )
+    If pMem = False Then
+        packed = False
+    Else
+        packed = True
+        fMem=pMem
+    EndIf
+    
+    If packed Then fPackedSize = PeekInt( fMem, 0 ) Else fPackedSize = fSize
+    
+    arcSize = FileSize( arc )
+    
+    fHandle = OpenToEdit( arc )
+        
+        // 223363651 = "CBP" + Chr(13)
+        arcFileHeader = ReadInt( fHandle )
+        If arcFileHeader <> 223363651 Then
+            gErrorString = "Invalid archive header"
+            DeleteMEMBlock fMem
+            CloseFile fHandle
+            Return False
+        EndIf
+        
+        // Luetaan arkistosta tiedostojen lukum‰‰r‰
+        arcFileCount = ReadInt( fHandle )
+        
+        SeekFile fHandle, 4
+        WriteInt fHandle, arcFileCount + 1
+        
+        SeekFile fHandle, arcSize
+        
+        WriteInt fHandle, fSize
+        WriteInt fHandle, fPackedSize
+        WriteInt fHandle, Len( file )
+        For i=1 To Len( file )
+            WriteByte fHandle, Asc(Mid(file, i, 1))
+        Next i
+        WriteByte fHandle, packed
+        WriteInt fHandle, hash
+        
+        For i = 0 To fPackedSize - 1
+            WriteByte fHandle, PeekByte( fMem, i + 4 )
+        Next i
+        
+    CloseFile fHandle
+    
+    Return True
+    
+End Function
+
+Function UnpackAll(overwrite=0,arc$="")
+    
+    // Jos arkiston nime‰ ei annettu, k‰ytet‰‰n oletusta
+    If Len( arc ) = 0 Then arc = gCurrentArchive
+    
+    // Jos oletusta ei ole, keskeytet‰‰n funktio
+    If Len( arc ) = 0 Then Return False
+    
+    f = OpenToRead(arc)
+        check = ReadInt(f)
+    CloseFile f
+    If check <> 223363651 Then Return False
+
+
+    filelist  = GetFilelist( arc )
+    filec     = PeekInt(filelist, 0)
+    
+    If filec <= 0 Then
+        DeleteMEMBlock filelist
+        Return False
+    EndIf
+    offs = 4
+    For i = 1 To filec
+        file$=_PeekString(filelist,offs)
+        UnpackFile(file, overwrite, arc)
+        offs = offs + 21 + Len(file)
+    Next i
+    DeleteMEMBlock filelist
+    
+    Return True
+
+End Function
+
+Function UnpackFile(file$,overwrite=0,arc$="")
+    // Tarkistetaan tiedoston olemassaolo
+    If FileExists(file) = True And overwrite = False Then
+        gErrorString = "File '"+file+"' already exists"
+        Return False
+    EndIf
+    
+    // Jos arkiston nime‰ ei annettu, k‰ytet‰‰n oletusta
+    If Len( arc ) = 0 Then arc = gCurrentArchive
+    
+    // Jos oletusta ei ole, keskeytet‰‰n funktio
+    If Len( arc ) = 0 Then
+        gErrorString = "Archive Not found"
+        Return False
+    EndIf
+    
+    f = OpenToRead(arc)
+        check = ReadInt(f)
+    CloseFile f
+    If check <> 223363651 Then
+        gErrorString = "Invalid archive header"
+        Return False
+    EndIf
+    
+    filelist  = GetFilelist( arc )
+    filec     = PeekInt(filelist, 0)
+    found     = 0
+    offs      = 4
+    For i = 1 To filec
+        filu$=Lower(_PeekString(filelist,offs))
+        offs = offs + 4 + Len(filu)
+        If filu = Lower(file) Then
+            found = i
+            realsize = PeekInt(filelist, offs)
+            size     = PeekInt(filelist, offs+4)
+            offset   = PeekInt(filelist, offs+8)
+            packed   = PeekByte(filelist, offs+12)
+            hash     = PeekInt(filelist, offs+13)
+            Exit
+        EndIf
+        offs = offs + 17
+    Next i
+    DeleteMEMBlock filelist
+    
+    If Not found Then
+        gErrorString = "File '"+file+"' doesn't exists in archive '"+arc+"'"
+        Return False
+    EndIf
+    
+    memBlock = MakeMEMBlock(size+4)
+    ofs=0
+    PokeInt memBlock,ofs,size:ofs+4
+    f=OpenToRead(arc)
+        SeekFile f,offset
+        For i=0 To size-1
+            PokeByte memBlock,ofs,ReadByte(f):ofs+1
+        Next i
+    CloseFile f
+    
+    If packed Then
+        asd=_unpackMem(memBlock,realsize)
+        DeleteMEMBlock memBlock
+        memBlock=asd
+    EndIf
+    f=OpenToWrite(file)
+        s=PeekInt(memBlock,0)
+        For i=0 To s-1
+            WriteByte f,PeekByte(memBlock,4+i)
+        Next i
+    CloseFile f
+    
+    If Crc32(file)<>hash Then
+        DeleteFile file
+        gErrorString = "Checksums didn't match"
+        Return False
+    EndIf
+    
+    Return True
+    
+End Function
+
+Function GetFilelist(arc$)
+    If FileExists( arc ) = False Then Return ""
+    
+    f = OpenToRead( arc )
+        If ReadInt( f ) <> 223363651 Then Return ""
+        fileCount = ReadInt( f )
+        mem       = MakeMEMBlock(4 + 21 * fileCount)
+        PokeInt mem, 0, fileCount
+        offsetMem = 4
+        For i = 1 To fileCount
+            size   = ReadInt( f )
+            psize  = ReadInt( f )
+            strlen = ReadInt( f )
+            ResizeMEMBlock mem, MEMBlockSize(mem) + strlen
+            PokeInt mem, offsetMem, strlen : offsetMem + 4
+            For a = 1 To strlen
+                PokeByte mem, offsetMem, ReadByte( f ) : offsetMem + 1
+            Next a
+            packed = ReadByte( f )
+            hash   = ReadInt( f )
+            ofs    = FileOffset(f)
+            PokeInt  mem, offsetMem, size   : offsetMem + 4
+            PokeInt  mem, offsetMem, psize  : offsetMem + 4
+            PokeInt  mem, offsetMem, ofs    : offsetMem + 4
+            PokeByte mem, offsetMem, packed : offsetMem + 1
+            PokeInt  mem, offsetMem, hash   : offsetMem + 4
+            SeekFile f,ofs + psize
+        Next i
+        
+    CloseFile f
+    
+    Return mem
+    
+End Function
+
+Function _unpackMem(memBlock,realsize=0)
+    offset=0
+    memSize       = PeekInt(memBlock, offset) : offset+4
+    bytePairCount = PeekByte(memBlock, offset) : offset+1
+    mbp  = MakeMEMBlock(bytePairCount*3)
+    For i = 1 To bytePairCount
+        PokeByte mbp, (i - 1) * 3 + 0, PeekByte(memBlock, offset)
+        PokeByte mbp, (i - 1) * 3 + 1, PeekByte(memBlock, offset+1)
+        PokeByte mbp, (i - 1) * 3 + 2, PeekByte(memBlock, offset+2)
+        offset + 3
+    Next i
+    datSize       = PeekInt(memBlock, offset) : offset+4
+    memUnpacked   = MakeMEMBlock(4 + datSize)
+    offset2       = 4
+    PokeInt memUnpacked,0,datSize
+    sss=MEMBlockSize(memBlock)
+    For i = 0 To datSize - 1
+        b = PeekByte(memBlock, offset) : offset + 1
+        found = 0
+        For o = 1 To bytePairCount
+            If b = PeekByte(mbp, (o - 1) * 3) Then
+                found = 1
+                sh=PeekByte(mbp,(o-1)*3+1)+(PeekByte(mbp,(o-1)*3+2)Shl 8)
+                PokeShort memUnpacked,offset2,sh
+                offset2 + 2
+                i + 1 : Exit
+            EndIf
+        Next o
+        If Not found Then
+            PokeByte memUnpacked, offset2, b
+            offset2 + 1
+        EndIf
+    Next i
+    DeleteMEMBlock mbp
+    If realsize>0 And realsize=MEMBlockSize(memUnpacked)-4 Then
+        Return memUnpacked
+    ElseIf realsize<MEMBlockSize(memUnpacked)+4 Then
+        MakeError "Something terrible went wrong!"
+    Else
+        tenp=_unpackMem(memUnpacked,realsize)
+        Return tenp
+    EndIf
+End Function
+
+Function _packMem(memBlock)
+    memBytes     = MakeMEMBlock( 256 )
+    memFreeBytes = MakeMEMBlock( 256 )
+    memSize      = PeekInt( memBlock, 0 )
+    
+    For i = 0 To memSize - 1
+        b = PeekByte( memBlock, 4 + i )
+        PokeByte memBytes, b, 1
+    Next i
+    
+    freeBytes = 0
+    For i = 0 To 255
+        If PeekByte( memBytes, i ) = 0 Then
+            PokeByte memFreeBytes, freeBytes, i
+            freeBytes + 1
+        EndIf
+    Next i
+    
+    DeleteMEMBlock memBytes
+    
+    If freeBytes = 0 Then
+        DeleteMEMBlock memFreeBytes
+        gErrorString = "No free chars"
+        Return False
+    EndIf
+    
+    mbp     = _BytePairs( memBlock )
+    bytePairCount    = 0
+    
+    For i = 0 To freeBytes - 1
+        If PeekInt(mbp, i * 6) > 7 Then bytePairCount + 1
+    Next i
+    
+    If bytePairCount = 0 Then
+        DeleteMEMBlock mbp
+        Return False
+    EndIf
+    
+    // Luodaan muistipala pakatulle datalle
+    memBlockPacked = MakeMEMBlock( memSize + 4 + 1024 )
+    
+    offset = 4
+    PokeByte memBlockPacked, offset, bytePairCount : offset + 1
+    
+    For i = 1 To bytePairCount
+        PokeByte  memBlockPacked, offset, PeekByte(memFreeBytes, i - 1)
+        PokeShort memBlockPacked, offset + 1, PeekShort(mbp, (i - 1) * 6 + 4)
+        offset + 3
+    Next i
+    
+    PokeInt memBlockPacked, offset, memSize : offset + 4
+    
+    For i = 0 To memSize - 2
+        b1       = PeekByte(memBlock, 4 + i)
+        b2       = PeekByte(memBlock, 4 + i + 1)
+        twobytes = b1 + (b2 Shl 8)
+        found    = 0
+        For o = 1 To bytePairCount
+            If twobytes = PeekShort(mbp, (o - 1) * 6 + 4) Then
+                found = 1
+                PokeByte memBlockPacked, offset, PeekByte(memFreeBytes, o - 1)
+                offset + 1
+                i + 1 : Exit
+            EndIf
+        Next o
+        If (Not found) And i<memSize-1 Then
+            PokeByte memBlockPacked,offset,b1
+            offset + 1
+        EndIf
+    Next i
+    If i=memSize-1 Then
+        PokeByte memBlockPacked, offset, PeekByte(memBlock, 4 + memSize - 1)
+        offset + 1
+    EndIf
+    PokeInt memBlockPacked, 0, offset - 4
+    ResizeMEMBlock memBlockPacked, offset
+    DeleteMEMBlock memBlock
+    DeleteMEMBlock memFreeBytes
+    DeleteMEMBlock mbp
+    
+    memTMP = MakeMEMBlock(MEMBlockSize(memBlockPacked))
+    MemCopy memBlockPacked, 0, memTMP, 0, MEMBlockSize(memBlockPacked)
+    memTMP2 = _packMem(memTMP)
+    
+    If memTMP2 Then
+        If MEMBlockSize(memTMP2)<MEMBlockSize(memBlockPacked) Then
+            DeleteMEMBlock memBlockPacked
+            memBlockPacked = memTMP2
+        EndIf
+    Else
+        DeleteMEMBlock memTMP
+    EndIf
+    
+    Return memBlockPacked
+    
+End Function
+
+Function _PeekString$(mem, offset)
+    l = PeekInt(mem, offset)
+    offset + 3
+    For i=1 To l
+        s$ = s + Chr(PeekByte(mem,offset + i))
+    Next i
+    Return s
+End Function
+
+Function _BytePairs(memBlock)
+    size   = PeekInt( memBlock, 0 )
+    
+    // Luodaan temppi-muistipala kaikkia mahdollisia tavupareja varten
+    tmpMem = MakeMEMBlock(4 + 65536 * 6)
+    PokeInt tmpMem, 0, 65536
+    
+    For a = 0 To 255
+        For b = 0 To 255
+            PokeByte tmpMem, 4 + (a * 256 + b) * 6 + 4, a
+            PokeByte tmpMem, 4 + (a * 256 + b) * 6 + 5, b
+        Next b
+    Next a
+    
+    For i = 0 To size - 2
+        a    = PeekByte(memBlock, 4 + i)
+        b    = PeekByte(memBlock, 5 + i)
+        offs = a * 256
+        PokeInt tmpMem, 4 + (offs + b) * 6, PeekInt(tmpMem, 4 + (offs+b)*6)+1
+    Next i
+    
+    // CombSort alkaa
+    count = PeekInt(tmpMem, 0)
+    iGap  = count
+    While (iGap > 1) Or (bSwitchFlag = True)
+        iGap = iGap * 10 / 13
+        If iGap < 1 Then iGap = 1
+        If iGap = 9 Or iGap = 10 Then iGap = 11
+        bSwitchFlag = False
+        For i = 0 To count - iGap
+            If (PeekInt(tmpMem, 4 + i * 6)<PeekInt(tmpMem, 4+(i+iGap)*6)) Then
+                helper1 = PeekInt(tmpMem, 4 + i * 6)
+                helper2 = PeekShort(tmpMem,4 + i * 6 + 4)
+                PokeInt tmpMem, 4 + i * 6, PeekInt(tmpMem,4+(i+iGap)*6)
+                PokeShort tmpMem, 4 + i*6+4,PeekShort(tmpMem,4+(i+iGap)*6+4)
+                PokeInt tmpMem, 4 + (i + iGap) * 6, helper1
+                PokeShort tmpMem, 4 + (i + iGap) * 6 + 4, helper2
+                bSwitchFlag = True
+            EndIf
+        Next i
+    Wend
+    // CombSort loppuu
+    
+    rtnMem = MakeMEMBlock(256 * 6)
+    MemCopy tmpMem, 4, rtnMem, 0, 256 * 6
+    DeleteMEMBlock tmpMem
+    Return rtnMem
+End Function

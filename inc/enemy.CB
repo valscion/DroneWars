@@ -1,0 +1,382 @@
+Global gEN_FireTime,gEnemiesKilled
+Dim _enemy_Images(gEnemies,MAX_ANGLES)
+
+gEN_FireTime = 2000
+
+Type ENEMY
+    Field id As Integer     'Enemy image ID
+    Field img As Integer    'Enemy img
+    Field x As Float        'Pos X
+    Field y As Float        'Pos Y
+    Field d As Float        'Direction
+    Field s As Float        'Speed
+    Field svel As Float     'Speed velocity
+    Field maxs As Float     'Max speed
+    Field vd As Float       'Enemy view distance
+    Field ts As Float       'Enemy turn speed
+    Field moveTimer As integer
+    
+    Field h As Float        'Health
+    Field arm As Float      'Armor
+    Field shi As Float      'Shield
+    
+    Field maxh As Float        'Health
+    Field maxarm As Float      'Armor
+    Field maxshi As Float      'Shield
+    
+    Field exp As integer
+    
+    Field size As Short         
+    
+    Field aggro As Byte
+    Field aggroTimer As integer
+    Field backUp As integer        'Indicates if enemy is too close to
+                                ' something and needs to backup a bit
+                                
+    Field notSeen
+    Field notSeenT
+                                
+    Field fireTimer As integer
+    
+    Field xvel As Float
+    Field yvel As Float
+    
+    Field ply_last_x As Float
+    Field ply_last_y As Float
+    
+    'Field slot1 As integer  'Ships weapon slots (under ship)
+    'Field slot2 As integer  'Ships weapon slots (on-top ship)
+    
+    Field weapon As integer    'Current weapon ID
+EndType
+
+Type ENESPAWN
+    Field x
+    Field y
+    Field count
+    Field stimer
+EndType
+
+Function EN_InitSpawns()
+    gEnemySpawns=0
+    For dt.DATA_TILE=Each DATA_TILE    
+        If dt\id>100 And dt\id<149 Then
+            ens.ENESPAWN = New(ENESPAWN)
+            ens\x=dt\x+8
+            ens\y=dt\y+8
+            ens\count=dt\id-100
+        EndIf
+
+        If dt\id>9 And dt\id<30 Then
+            EN_CreateEnemy(dt\id-10,dt\x+8,dt\y+8)
+        EndIf
+    Next dt
+EndFunction
+
+Function EN_InitImages()
+    'Make images for enemies
+    file$ = "ini\enemies.ini"
+    i=0
+    While i<gEnemies
+        section$="enemy"+i
+        img_$=iniReadString(file,section,"img")
+        temp_img = MaskImage2(LoadImage(img_))
+        If Not(temp_img) Then MakeError "FAILED TO LOAD Image '"+img_+"'! (EN_InitImages)"
+        If ImageWidth(temp_img)=0 And ImageHeight(temp_img)=0 Then MakeError "FAILED TO LOAD Image '"+img_+"'! (EN_InitImages)"
+        k=0
+        While k<MAX_ANGLES
+            ang_plus=360/MAX_ANGLES
+            _enemy_Images(i,k)=CloneImage(temp_img)
+            RotateImage _enemy_Images(i,k),Int(-k*ang_plus)
+            k+1
+        Wend
+        i+1
+    Wend
+EndFunction
+
+
+Dim ENEMY_CLASSES(gEnemies,8) As Float
+Function EN_InitEnemies()
+    For id=0 To gEnemies-1
+        file$ = "ini\enemies.ini"
+        section$="enemy"+id
+    
+        ENEMY_CLASSES(id,0)          = iniReadFloat(file,section,"vd")
+        ENEMY_CLASSES(id,1)          = iniReadFloat(file,section,"ts")
+
+        ENEMY_CLASSES(id,2)          = iniReadFloat(file,section,"svel")
+        ENEMY_CLASSES(id,3)          = iniReadFloat(file,section,"maxs")
+        ENEMY_CLASSES(id,4)          = iniReadFloat(file,section,"h")
+        ENEMY_CLASSES(id,5)          = iniReadFloat(file,section,"arm")
+        ENEMY_CLASSES(id,6)          = iniReadFloat(file,section,"shi")
+
+        ENEMY_CLASSES(id,7)          = iniReadInt(file,section,"exp")
+    Next id
+EndFunction    
+
+Function EN_CreateEnemy(id,x,y)
+
+    en.ENEMY       = New(ENEMY)
+
+    en\id          = id
+    spawnPoint     = Rand(gEnemySpawns-1)
+    en\x           = x'_enemy_Spawn(spawnPoint,0)
+    en\y           = y'_enemy_Spawn(spawnPoint,1)
+    en\ply_last_x  = en\x+Rand(-16,16)
+    en\ply_last_y  = en\y+Rand(-16,16)
+    en\d           = 90.0
+    en\s           = 0.0
+    en\size        = ImageWidth(_enemy_Images(en\id, 0))
+    en\vd          = Int(ENEMY_CLASSES(id,0))
+    en\ts          = Int(ENEMY_CLASSES(id,1))
+
+    en\svel        = ENEMY_CLASSES(id,2)
+    en\maxs        = ENEMY_CLASSES(id,3)
+    en\h           = ENEMY_CLASSES(id,4)/gDifficulty
+    en\arm         = ENEMY_CLASSES(id,5)/gDifficulty
+    en\shi         = ENEMY_CLASSES(id,6)/gDifficulty
+    
+    en\maxh        = en\h
+    en\maxarm      = en\arm
+    en\maxshi      = en\shi
+    
+    en\fireTimer   = Timer()+Rand(gEN_FireTime)
+    en\notSeen     = True
+    
+    en\exp         = Int(ENEMY_CLASSES(id,7))
+
+    en\weapon      = WEP_GetHandle(0)
+EndFunction
+
+Function EN_UpdateSpawns()
+    For ens.ENESPAWN = Each ENESPAWN
+        For ply1.PLY = Each PLY
+            If Distance(ens\x,ens\y,ply1\x,ply1\y)<=100 Then
+                'If Not(CastRay(ens\x,ens\y,ply1\x,ply1\y))
+                    If Timer()>ens\stimer Then
+                        If ens\count>0
+                            EN_CreateEnemy(Rand(gEnemies-1),ens\x+Rand(-8,8),ens\y+Rand(-8,8))
+                            ens\count=ens\count-1
+                        EndIf
+                        ens\stimer=Timer()+Rand(1000,3000)
+                    EndIf
+                'EndIf
+            EndIf
+        Next ply1
+    Next ens
+EndFunction
+
+
+Function EN_UpdateEnemies()
+    For en.ENEMY = Each ENEMY
+        If updateEnemy Then
+            For ply1.PLY = Each PLY
+                plyX=ply1\x
+                plyY=ply1\y
+                If en\notSeen=False And Distance(en\x,en\y, ply1\x,ply1\y)<=en\vd Then
+                    If Distance(en\x,en\y, ply1\x,ply1\y)<=en\size*4 Then
+                        en\backUp=-1
+                    Else
+                        en\backUp=1
+                    EndIf
+                    dest_ang#=GetAngle(en\x,en\y, ply1\x,ply1\y)
+                    en\d = CurveAngle(dest_ang, en\d, en\ts)
+                    en\xvel = en\xvel + Cos(en\d)*(en\svel*en\backUp)
+                    en\yvel = en\yvel - Sin(en\d)*(en\svel*en\backUp)
+                    en\ply_last_x = ply1\x
+                    en\ply_last_y = ply1\y
+                    en\aggro=True
+                    en\aggroTimer=Timer()+5000
+    
+                    // ENEMY SHOOTS
+                    If Approx(en\d,dest_ang,10,10) And Timer()>en\fireTimer Then
+                        _ttime=BULLET_CreateBulletEn(en\weapon,ConvertToInteger(en))
+                        en\fireTimer = Timer()+Rand(_ttime*2,_ttime*Rand(2,7))
+                    EndIf
+                Else
+                    If Distance(en\x,en\y, en\ply_last_x,en\ply_last_y)>=8 Then
+                        en\xvel = en\xvel + Cos(en\d)*en\svel/(2-aggro)
+                        en\yvel = en\yvel - Sin(en\d)*en\svel/(2-aggro)
+                    Else
+                        If en\xvel>0.0 Then en\xvel = en\xvel - en\svel
+                        If en\xvel<0.0 Then en\xvel = en\xvel + en\svel
+                        If en\yvel>0.0 Then en\yvel = en\yvel - en\svel
+                        If en\yvel<0.0 Then en\yvel = en\yvel + en\svel
+                        en\aggro=False
+                    EndIf
+                    en\d = CurveAngle(GetAngle(en\x,en\y, en\ply_last_x,en\ply_last_y), en\d, en\ts*2)
+                EndIf
+            Next ply1
+            
+            For en2.ENEMY=Each ENEMY
+                If Distance(en\x,en\y, en2\x,en2\y)<=16 Then
+                    If en2\aggro Then
+                        en\aggro=en2\aggro
+                        en\ply_last_x=en2\ply_last_x
+                        en\ply_last_y=en2\ply_last_y
+                    EndIf
+                EndIf
+            Next en2
+        EndIf
+        
+        If en\aggro And Timer()>en\aggroTimer Then en\aggro=False
+        
+        If en\aggro=False And Timer()>en\moveTimer
+            rx=en\x+Rand(-64,64)
+            ry=en\y+Rand(-64,64)
+            
+            If MAP_GetTileID(rx,ry,2)=0' And MAP_GetTileID(rx,ry,0)>0
+                en\ply_last_x  = rx
+                en\ply_last_y  = ry
+                en\moveTimer=Timer()+Rand(2000,10000)
+            EndIf
+        EndIf
+
+        ene=ConvertToInteger(en)
+        collisions=EN_CollisionMap(ene,en\xvel*2,en\yvel*2)
+        For i=0 To collisions-1
+            coll_ang=EN_GetCollision(i)
+            If coll_ang=0 Then en\xvel=Abs(en\xvel)*-0.3':PlayGameSound(SOUND_HIT3)
+            If coll_ang=2 Then en\xvel=Abs(en\xvel)*0.3':PlayGameSound(SOUND_HIT3)
+            If coll_ang=1 Then en\yvel=Abs(en\yvel)*0.3':PlayGameSound(SOUND_HIT3)
+            If coll_ang=3 Then en\yvel=Abs(en\yvel)*-0.3':PlayGameSound(SOUND_HIT3)
+        Next i
+
+
+        en\x = en\x + en\xvel
+        en\y = en\y + en\yvel
+        
+        ang=360/MAX_ANGLES
+        image_ang=Min(Max(Int(en\d/ang),0),MAX_ANGLES-1)
+        img=_enemy_Images(en\id,0)
+        iw=ImageWidth(img)
+        ih=ImageHeight(img)
+        
+        x#=en\x+gCameraX
+        y#=en\y+gCameraY
+        
+        // If the enemy is in screen and player sees it, DRAW IT!
+        If x<SW And x>0 And y<SH And y>0 Then
+            If updateEnemy Then
+                For ply1.PLY = Each PLY
+                    en\notSeen=CastRay(ply1\x+8,ply1\y+8, en\x+8,en\y+8, 16)
+                    If gDebug
+                        Color cbgreen
+                        Line gCameraX+ply1\x,gCameraY+ply1\y,gCameraX+gCastX,gCameraY+gCastY
+                    EndIf
+                Next ply1
+            EndIf
+
+            If en\notSeen=False
+                If en\shi<en\maxshi Or en\arm<en\maxarm Or en\h<en\maxh Then
+                    Color 0,128,0
+                    x2=Int(x-iw)
+                    y2=Int(y-ih)
+                    If en\maxshi>0 Then Line x2,y2, x2+Max(0,(en\shi/en\maxshi)*(iw*2)),y2
+                    Color 0,0,128
+                    If en\maxarm>0 Then Line x2,y2+1, x2+Max(0,(en\arm/en\maxarm)*(iw*2)),y2+1
+                    Color 128,0,0
+                    If en\maxh>0 Then Line x2,y2+2, x2+Max(0,(en\h/en\maxh)*(iw*2)),y2+2
+                EndIf
+                DrawImage _enemy_Images(en\id,image_ang),x,y
+            EndIf
+        EndIf
+        
+        
+        If updateEnemy Then
+            // Check collision for player's bullets
+            For b.BULLET = Each BULLET
+                If b\alive And b\friendly Then
+                    If ImagesCollide(_enemy_Images(en\id,image_ang),en\x,en\y,0, _bullet_Images(b\id,b\image_ang),b\x,b\y,0) Then
+                        b\alive=False
+        
+                        en\xvel = en\xvel + Cos(b\d)*en\svel
+                        en\yvel = en\yvel - Sin(b\d)*en\svel
+                        If Not en\aggro Then
+                            en\ply_last_x=b\fx+Rand(-32,32)
+                            en\ply_last_y=b\fy+Rand(-32,32)
+                            en\aggro=True
+                            en\aggroTimer=Timer()+5000
+                        EndIf
+                        
+                        PlayGameSound(SOUND_HIT1, en\x,en\y)
+                        If en\shi>0.0 Then
+                            en\shi=en\shi-b\dam
+                        ElseIf en\arm>0.0 Then
+                            en\arm=en\arm-b\dam
+                        ElseIf en\h>0.0 Then
+                            en\h=en\h-b\dam
+                        EndIf
+                    EndIf
+                EndIf
+            Next b
+        EndIf
+    Next en
+
+    For en.ENEMY = Each ENEMY
+        If en\h<=0.0 Then
+            PlayGameSound(SOUND_ENEDIE1, en\x,en\y)
+            If Rand(5)=3 Then PWUP_Create(Rand(gPwups-1),en\x,en\y)
+            For ply1.PLY = Each PLY
+                ply1\exp=ply1\exp+en\exp
+            Next ply1
+            gEnemiesKilled+1
+            Delete en
+        EndIf
+    Next en
+EndFunction
+
+Global gEN_CollisionID
+Dim EN_Collisions(128,2)
+Function EN_CollisionMap(objID, spex#,spey#)
+    obj.ENEMY = ConvertToType(objID)
+
+    For i=0 To gEN_CollisionID-1
+        EN_Collisions(i,0)=-1
+        EN_Collisions(i,1)=0
+    Next i
+
+    gEN_CollisionID=0
+    img=_enemy_Images(obj\id,0)
+    If Not img Then MakeError "NO IMAGE FOR COLLISION CHECK! (EN_CollisionMap)"
+    iw=ImageWidth(img)
+    ih=ImageHeight(img)
+    
+    For ht.HIT_TILE = Each HIT_TILE
+        If ht\hit=1 Then
+            If BoxOverlap(obj\x-4+spex,obj\y-4+spey,iw,ih, ht\x-9,ht\y-9,18,18) Then
+                ang=Int(GetAngle(obj\x+spex,obj\y+spey,ht\x,ht\y))
+                If ang>=315 Or ang<=45 Then colang=0
+                If ang>=45 And ang<=135 Then colang= 1
+                If ang>=135 And ang<=225 Then colang= 2
+                If ang>=225 And ang<=315 Then colang= 3
+                
+                EN_Collisions(gEN_CollisionID,0)=colang
+                EN_Collisions(gEN_CollisionID,1)=ang
+                gEN_CollisionID+1
+            EndIf
+        EndIf
+    Next ht
+    
+    For mobj.MAPOBJ = Each MAPOBJ
+        If mobj\img>0 Then
+            If BoxOverlap(obj\x-4+spex,obj\y-4+spey,iw,ih, mobj\x-8,mobj\y-8,16,16) Then
+                ang=Int(GetAngle(obj\x+spex,obj\y+spey,mobj\x,mobj\y))
+                If ang>=315 Or ang<=45 Then colang=0
+                If ang>=45 And ang<=135 Then colang= 1
+                If ang>=135 And ang<=225 Then colang= 2
+                If ang>=225 And ang<=315 Then colang= 3
+                
+                EN_Collisions(gEN_CollisionID,0)=colang
+                EN_Collisions(gEN_CollisionID,1)=ang
+                gEN_CollisionID+1
+            EndIf
+        EndIf
+    Next mobj
+    
+    Return gEN_CollisionID
+EndFunction
+
+Function EN_GetCollision(index,_type=0)
+    Return EN_Collisions(index,_type)
+EndFunction

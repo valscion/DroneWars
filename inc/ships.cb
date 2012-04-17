@@ -1,0 +1,72 @@
+Const SHIP_BY_ID        = 0
+Const SHIP_BY_LEVEL     = 1
+
+Dim _ships(MAX_SHIPS) 'ID table for easy access
+Dim _ship_Images(MAX_SHIPS,MAX_ANGLES)
+
+Type SHIP 'Ships
+    Field id As Byte        'Ship ID
+    Field name As String    'Ships name
+    Field img As Integer    'Ship image
+    Field svel As Float     'Ship accel speed
+    Field maxs As Float     'Ship max speed
+    
+    Field h As Float        'Ship health
+    Field arm As Float      'Ship armor
+    Field shi As Float      'Ship shield
+    
+    Field slot1 As integer  'Ships weapon slots (under ship)
+    Field slot2 As integer  'Ships weapon slots (on-top ship)
+    
+    Field cost As Integer   'Cost in shop
+    Field lev As Integer    'Required level
+End Type
+
+' Default ship
+
+Function SHIP_LoadShips()
+    file$="ini/ships.ini"
+    For i=0 To MAX_SHIPS-1
+        section$="ship"+i
+        ship1.SHIP      = New(SHIP)
+        ship1\id        = i
+        ship1\name      = iniReadString(file,section,"name")
+        img_$ = iniReadString(file,section,"img")
+        ship1\img       = MaskImage2(LoadImage(img_))
+        If Not(ship1\img And ImageWidth(ship1\img)>0 And ImageHeight(ship1\img)>0) Then MakeError "FAILED TO LOAD IMAGE '"+img_+"'! (SHIP_LoadShips)"
+
+        For k=0 To MAX_ANGLES-1
+            ang_plus=360/MAX_ANGLES
+            _ship_Images(i,k)=CloneImage(ship1\img)
+            RotateImage _ship_Images(i,k),-(k*ang_plus)
+        Next k
+        
+        ship1\svel      = iniReadFloat(file,section,"svel")
+        ship1\maxs      = iniReadFloat(file,section,"maxs")
+        ship1\h         = iniReadFloat(file,section,"h")
+        ship1\arm       = iniReadFloat(file,section,"arm")
+        ship1\shi       = iniReadFloat(file,section,"shi")
+        ship1\slot1     = iniReadInt(file,section,"slot1")
+        ship1\slot2     = iniReadInt(file,section,"slot2")
+        ship1\cost      = iniReadInt(file,section,"cost")
+        ship1\lev       = iniReadFloat(file,section,"lev")
+        _ships(i)       =ConvertToInteger(ship1)
+        UpdateLoading("ships")
+    Next i
+EndFunction
+
+Function SHIP_GetHandler(id,_type=0)
+    For ship1.SHIP = Each SHIP
+        Select _type
+            Case 0
+                If ship1\id = id Then Return ConvertToInteger(ship1)
+            Case 1
+                If ship1\lev = id Then Return ConvertToInteger(ship1)
+        EndSelect
+    Next ship1
+EndFunction
+
+Function SHIP_GetID(shipIN)
+    temp_ship.SHIP = ConvertToType(shipIN)
+    Return temp_ship\id
+EndFunction

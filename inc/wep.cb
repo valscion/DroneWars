@@ -1,0 +1,158 @@
+Global gFireTimer
+
+Dim _weapon_Images(MAX_WEAPONS, MAX_ANGLES)
+Type WEP 'Weapon
+    Field id As Byte        'ID
+    Field nam As String     'Name
+    Field img As integer    'Weapon image
+    Field fsp As Float      'Fire speed (in millisecs)
+    Field bsp As Float      'Bullet speed
+    Field bimg As integer   'Bullet image
+    Field dam As Float      'Damage
+    Field size As integer   'How many slotspaces weapon takes
+    Field spr As Float      'Bullet spread/recoil...w/e
+    Field lev As integer
+    Field cost As Float     'Cost in shop
+End Type
+
+Dim _bullet_Images(MAX_WEAPONS, MAX_ANGLES)
+Type BULLET
+    Field id As integer
+    Field alive As Byte
+    Field friendly As Byte
+    Field img As integer
+    Field image_ang As integer
+    Field pwupID As Byte
+    Field x As Float
+    Field y As Float
+    Field fx As Float 'Where the bullet was fired
+    Field fy As Float 
+    Field d As Float
+    Field s As Float
+    Field dam As Float
+    Field size As integer
+EndType
+
+Function BULLET_CreateBulletPly(weapon, who)
+    b.BULLET    =New(BULLET)
+    w.WEP       =ConvertToType(weapon)
+    ply1.PLY    =ConvertToType(who)
+
+    b\friendly  =True 'Does not harm players
+    b\id        =w\id
+    b\alive     =True
+    b\img       =w\bimg
+    b\x         =ply1\x
+    b\y         =ply1\y
+    b\fx        =ply1\x
+    b\fy        =ply1\y
+    If gWeaponPowerup=3 Then b\d=ply1\d+(Rnd(-w\spr,w\spr)/2) Else b\d=ply1\d+Rnd(-w\spr,w\spr)
+    If gWeaponPowerup=2 Then b\dam=w\dam*1.5 Else b\dam=w\dam
+    b\s         =w\bsp
+    b\size      =ImageWidth(_bullet_Images(b\id,0))
+    
+    PlayGameSound(SOUND_LASER1, ply1\x,ply1\y)',b\x,b\y
+    
+    Return w\fsp 'Returns the firespeed for the gFireTimer. Hey, why not? =)
+EndFunction
+
+Function BULLET_CreateBulletEn(weapon, who)
+    b.BULLET    =New(BULLET)
+    w.WEP       =ConvertToType(weapon)
+    en.ENEMY    =ConvertToType(who)
+
+    b\friendly  =False 'Does harm players
+    b\id        =w\id
+    b\alive     =True
+    b\img       =w\bimg
+    b\x         =en\x
+    b\y         =en\y
+    b\d         =en\d+Rnd(-w\spr,w\spr)
+    b\dam       =w\dam*2
+    b\s         =w\bsp
+    b\size      =ImageWidth(_bullet_Images(b\id,0))
+    
+    PlayGameSound(SOUND_LASER2, en\x,en\y)
+    
+    Return w\fsp 'Returns the firespeed for the gFireTimer. Hey, why not? =)
+EndFunction
+
+Function BULLET_UpdateBullets()
+    For b.BULLET = Each BULLET
+        If b\alive=True
+            b\x=b\x+Cos(b\d)*b\s
+            b\y=b\y-Sin(b\d)*b\s
+            iw=ImageWidth(b\img)
+            ih=ImageHeight(b\img)
+            For ht.HIT_TILE = Each HIT_TILE
+                If ht\hit=1 Then
+                    timg=_bullet_Images(b\id,b\image_ang)
+                    tiw=ImageWidth(timg)/2
+                    tih=ImageHeight(timg)/2
+                    If ImagesCollide(timg,b\x,b\y,0, _tile(ht\hit),ht\x-8,ht\y-8,0) Then
+                        b\alive=False
+                    EndIf
+                EndIf
+            Next ht
+            ang=360/MAX_ANGLES
+            b\image_ang=Min(Max(Int(b\d/ang),0),MAX_ANGLES-1)
+            DrawImage _bullet_Images(b\id,b\image_ang),b\x+gCameraX,b\y+gCameraY
+        EndIf
+    Next b
+    
+    For b.BULLET = Each BULLET
+        If b\alive=False Then Delete b
+    Next b
+EndFunction
+
+Function WEP_LoadWeapons()
+    file$ = "ini/weapons.ini"
+    MAX_WEAPONS = iniReadInt(CONFIG_INI, "content", "weapons")
+    For i=0 To MAX_WEAPONS-1
+        w.WEP = New(WEP)
+        w\id = i
+        section$="wep"+i
+        w\nam = iniReadString(file, section, "name")
+        
+        img_$=iniReadString(file,section,"img")
+        If img_="" Then MakeError "NO IMAGE DEFINED IN WEAPONS.INI @ "+section+"! (WEP_LoadWeapons)"
+        w\img = MaskImage2(LoadImage(img_))
+        w\fsp = iniReadInt(file, section, "fsp")
+        w\bsp = iniReadFloat(file, section, "bsp")
+        
+        bimg_$=iniReadString(file,section,"bimg")
+        If bimg_="" Then MakeError "NO BULLET IMAGE DEFINED IN WEAPONS.INI @ "+section+"! (WEP_LoadWeapons)"
+        w\bimg = MaskImage2(LoadImage(bimg_))
+        
+        If Not(w\img) Then MakeError "FAILED TO LOAD Image '"+img_+"'! (WEP_LoadWeapons)"
+        If Not(w\bimg) Then MakeError "FAILED TO LOAD Image '"+bimg_+"'! (WEP_LoadWeapons)"
+        
+        ResizeImage w\bimg,ImageWidth(w\bimg)*.75,ImageHeight(w\bimg)*.75
+        
+        For k=0 To MAX_ANGLES-1
+            ang_plus=360/MAX_ANGLES
+            _bullet_Images(i,k)=CloneImage(w\bimg)
+            _weapon_Images(i,k)=CloneImage(w\img)
+            RotateImage _bullet_Images(i,k),-(k*ang_plus)
+            RotateImage _weapon_Images(i,k),-(k*ang_plus)
+        Next k
+        
+        w\dam = iniReadFloat(file, section, "dam")
+        w\size = iniReadInt(file, section, "size")
+        w\spr = iniReadFloat(file, section, "spr")
+        w\lev = iniReadInt(file, section, "lev")
+        w\cost = iniReadInt(file, section, "cost")
+        UpdateLoading("weapons")
+    Next i
+EndFunction
+
+Function WEP_GetHandle(id As Byte)
+    For w.WEP = Each WEP
+        If w\id = id Then Return ConvertToInteger(w)
+    Next w
+EndFunction
+
+Function WEP_GetID(IN As integer)
+    w.WEP = ConvertToType(IN)
+    Return w\id
+EndFunction

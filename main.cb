@@ -1,0 +1,421 @@
+tempw=iniReadInt("ini\config.ini","display","width")
+temph=iniReadInt("ini\config.ini","display","height")
+tempd=iniReadInt("ini\config.ini","display","depth")
+tempm=iniReadInt("ini\config.ini","display","mode")
+
+SCREEN tempw,temph,tempd,tempm
+SCREEN 640,480,0,2
+FrameLimit 60
+SetWindow "DroneWars 0.7"
+
+Global gDifficulty As Float
+Global gDebug, gConsoleOut$
+gDebug=False
+gConsoleOut="DroneWars -dev 0.8"
+
+Global SW,SH
+SW=320
+SH=240
+
+
+Const CONFIG_INI="ini/config.ini"
+
+ClsColor 25,25,25
+Cls
+
+Include "inc\uti.cb"
+Include "inc\sound.cb"
+Include "inc\keyconfig.cb"
+Include "inc\menus.cb"
+Include "inc\imgfont.cb"
+
+SetKeys()
+
+SAFEEXIT OFF
+
+backToMenu:
+sele=MainMenu()
+If sele=4 Then Goto GameLoop
+
+
+
+GameLoop:
+Include "inc\intro.cb"
+
+Const MAX_ANGLES = 180
+Global MAX_SHIPS,MAX_WEAPONS,gEnemies
+gEnemies=Int(iniReadInt("ini\enemies.ini","other","amount",0))
+MAX_SHIPS=iniReadInt(CONFIG_INI,"content","ships")
+MAX_WEAPONS=iniReadInt(CONFIG_INI,"content","weapons")
+gTotalItems=gTotalItems+MAX_WEAPONS+MAX_SHIPS+gEnemies
+
+Include "inc\ships.cb"
+Include "inc\enemy.cb"
+Include "inc\ply.cb"
+Include "inc\wep.cb"
+Include "inc\map.cb"
+Include "inc\pwup.cb"
+Include "inc\mapobj.cb"
+
+SHIP_LoadShips()
+WEP_LoadWeapons()
+Gosub PLY_CreatePlayer
+
+background=LoadImage("gfx\stars.png")
+MaskImage background,10,10,10
+
+Global gHudPanel,gHudIndicators,gDropOff,gDropOn
+gHudPanel = LoadImage("gfx\hud_panel.png")
+gHudIndicators = LoadImage("gfx\hud_indicators.png")
+gDropOff =LoadImage("gfx\dropMenu_off.png")
+gDropOn =LoadImage("gfx\dropMenu_on.png")
+MaskImage gDropOff,255,0,255
+MaskImage gDropOn,255,0,255
+MaskImage gHudPanel,255,0,255
+MaskImage gHudIndicators,255,0,255
+
+
+Randomize Rand(181724897)
+
+Global gPauseMusicVolume#
+gPauseMusicVolume=0.0
+
+updateEnemyTimer=Timer()
+Global updateEnemy
+
+FrameLimit 30
+
+MAP_LoadMap("map/test/test.map")
+MAPOBJ_Init(0)
+EN_InitEnemies()
+EN_InitImages()
+EN_InitSpawns()
+
+'For i=0 To 15
+'    EN_CreateEnemy(Rand(gEnemies-1))
+'Next i
+gMusic = PlaySound("sfx/dw-lvl3.xm",gMsxVolume)
+
+PWUP_Init()
+
+Repeat
+    updateEnemy=False
+
+    If Timer()>updateEnemyTimer
+        updateEnemy=True
+        updateEnemyTimer=Timer()+30
+    EndIf
+
+    gPauseMusicVolume=CurveValue(gMsxVolume,gPauseMusicVolume,5)
+    SetSound gMusic,0,gPauseMusicVolume
+    
+    SetFont aFont(FONT_NORMAL)
+
+    'If KeyHit(cbKeyG) Then gDebug=Not gDebug
+    'If KeyHit(41) Then Gosub DebugConsole
+    
+    gCameraX=SW/2-ply1\x
+    gCameraY=SH/2-ply1\y
+    
+    DrawBackground(background)
+
+    MAP_DrawMap(0)
+    BULLET_UpdateBullets()
+    MAPOBJ_Update()
+    EN_UpdateSpawns()
+    EN_UpdateEnemies()
+    PWUP_Update()
+    Gosub UpdatePlayer
+    
+    MAP_DrawMap(1)
+    
+    If KeyHit(1) Then PauseLoop()
+    Gosub DrawHud
+    
+    Gosub PlyDie
+    
+    Gosub DoublePix
+    
+    If gDebug
+        ht.HIT_TILE=First(HIT_TILE)
+        While ht<>NULL
+            Color 128,0,128
+            Box (gCameraX+ht\x-8)*2,(gCameraY+ht\y-8)*2,32,32,0
+            Color 255,0,255
+            Box (gCameraX+ht\x)*2,(gCameraY+ht\y)*2,32,32,0
+            ht=After(ht)
+        Wend
+    EndIf
+    
+    'Color 255,255,255
+    'Text 0,36,"tileID:"+MAP_GetTileID(ply1\x,ply1\y)
+    
+    DrawScreen
+Forever
+
+DrawHud:
+    If KeyHit(cbKeyI) Then gShowInfo =Not gShowInfo
+
+    gDropMenuY=CurveValue(0,gDropMenuY,3)
+
+    If gShowInfo=True Then
+        gInfoMenuY=CurveValue(52,gInfoMenuY,3)
+    Else
+        gInfoMenuY=CurveValue(0,gInfoMenuY,3)
+    EndIf
+    
+    // DROPMENU (INFO & PAUSEMENU)
+    dropOff_Y=4+(gDropMenuY+gInfoMenuY)
+    DrawImageBox gDropOff, SW-97,40, 0,112-dropOff_Y, 65,dropOff_Y
+    
+    // HUD-PANEL AND INDICATORS
+    DrawImage gHudPanel,SW-ImageWidth(gHudPanel),3
+    posx=(ply1\h/100)*17
+    DrawImageBox gHudIndicators, SW-127,6, 0,0,posx*5,10
+    posx=(ply1\arm/100)*17
+    DrawImageBox gHudIndicators, SW-127,16, 0,10,posx*5,10
+    posx=(ply1\shi/100)*17
+    DrawImageBox gHudIndicators, SW-127,26, 0,20,posx*5,10
+    
+    // INFO TEXT
+    If gInfoMenuY>51.9 And dropOff_Y<56.1 Then
+        _wepon.WEP = ConvertToType(ply1\weapon)
+        Color 0,128,0
+        x=SW-87
+        If gWeaponPowerup=2 Then dam#=_wepon\dam*1.5 Else dam=_wepon\dam
+        Line x,61,x+Int(dam/15.0*41.0),61
+        
+        DrawLevel(x+36,65,ply1\lev)
+        
+        exp#=ply1\exp
+        nexp#=ply1\nexp
+        Line x,81,x+Int(exp/nexp*41.0),81
+    EndIf
+        
+    
+Return
+
+'SUB-PROGRAMS *******************
+UpdatePlayer:
+    If KeyDown(KEY_TURN_L) Then ply1\d=ply1\d+10.0
+    If KeyDown(KEY_TURN_R) Then ply1\d=ply1\d-10.0
+    
+    If ply1\d<0 Then ply1\d=359
+    If ply1\d>359 Then ply1\d=0
+    
+    
+    If KeyDown(KEY_UP) Then
+        xvel#=xvel+Cos(ply1\d)*ply1\svel
+        yvel#=yvel-Sin(ply1\d)*ply1\svel
+        If pitch#<3.0 Then pitch=pitch+0.1
+        'If xvel>ply1\maxs Then xvel=ply1\maxs
+        'If yvel<ply1\maxs Then yvel=-ply1\maxs
+    EndIf
+    
+    If KeyDown(KEY_DOWN) Then
+        xvel=xvel+Cos(ply1\d)*-ply1\svel
+        yvel=yvel-Sin(ply1\d)*-ply1\svel
+        If pitch<3.0 Then pitch=pitch+0.1
+        'If xvel<ply1\maxs Then xvel=-ply1\maxs
+        'If yvel>ply1\maxs Then yvel=ply1\maxs
+    EndIf
+    
+    If KeyDown(KEY_STRAFE_L) Then
+        xvel=xvel+Cos(ply1\d-90)*-ply1\svel
+        yvel=yvel-Sin(ply1\d-90)*-ply1\svel
+        If pitch<3.0 Then pitch=pitch+0.1
+        'If xvel<ply1\maxs Then xvel=-ply1\maxs
+        'If yvel>ply1\maxs Then yvel=ply1\maxs
+    EndIf
+    
+    If KeyDown(KEY_STRAFE_R) Then
+        xvel=xvel+Cos(ply1\d+90)*-ply1\svel
+        yvel=yvel-Sin(ply1\d+90)*-ply1\svel
+        If pitch<3.0 Then pitch=pitch+0.1
+        'If xvel<ply1\maxs Then xvel=-ply1\maxs
+        'If yvel>ply1\maxs Then yvel=ply1\maxs
+    EndIf
+    
+    If Not(KeyDown(KEY_UP) Or KeyDown(KEY_DOWN) Or KeyDown(KEY_STRAFE_L) Or KeyDown(KEY_STRAFE_R)) Then
+        If xvel<-0.05 Then xvel=xvel+(ply1\svel/2)
+        If yvel<-0.05 Then yvel=yvel+(ply1\svel/2)
+        If xvel>0.05 Then xvel=xvel-(ply1\svel/2)
+        If yvel>0.05 Then yvel=yvel-(ply1\svel/2)
+        If pitch>0.0 Then pitch=pitch-0.1
+    EndIf
+    
+    pl=ConvertToInteger(ply1)
+    collisions=PLY_CollisionMap(pl,xvel*2,yvel*2)
+    i=0
+    While i<collisions
+    'For i=0 To collisions-1
+        coll_ang=PLY_GetCollision(i)
+        If coll_ang=0 Then xvel=Abs(xvel)*-0.3:PlayGameSound(SOUND_HIT3, ply1\x,ply1\y)
+        If coll_ang=2 Then xvel=Abs(xvel)*0.3:PlayGameSound(SOUND_HIT3, ply1\x,ply1\y)
+        If coll_ang=1 Then yvel=Abs(yvel)*0.3:PlayGameSound(SOUND_HIT3, ply1\x,ply1\y)
+        If coll_ang=3 Then yvel=Abs(yvel)*-0.3:PlayGameSound(SOUND_HIT3, ply1\x,ply1\y)
+        i+1
+    'Next i
+    Wend
+        
+    ply1\x=ply1\x+xvel
+    ply1\y=ply1\y+yvel
+    
+    ang=360/MAX_ANGLES
+    
+    'Line ply1\x, ply1\y, ply1\x+Cos(ply1\d)*(ply1\s*10), ply1\y-Sin(ply1\d)*(ply1\s*10)
+    image_ang=Min(Max(Int(ply1\d/ang),0),MAX_ANGLES-1)
+    DrawImage _weapon_Images(WEP_GetID(ply1\weapon),image_ang),gCameraX+ply1\x,gCameraY+ply1\y
+    DrawImage _ship_Images(SHIP_GetID(ply1\ship),image_ang),gCameraX+ply1\x,gCameraY+ply1\y
+    
+    
+    If SoundPlaying(ply1\thrust)=OFF Then
+        ply1\thrust = PlaySound(aSound(SOUND_THRUST),gSfxVolume)
+    EndIf
+    SetSound ply1\thrust,0,gSfxVolume,0,14664+14664*pitch
+    
+    If KeyDown(KEY_FIRE) Then
+        If Timer()>gFireTimer Then
+            add=BULLET_CreateBulletPly(ply1\weapon, ConvertToInteger(ply1))
+            If gWeaponPowerup=1 Then add=add*0.7
+            gFireTimer=Timer()+add
+        EndIf
+    EndIf
+    
+    
+    If ply1\exp>=ply1\nexp Then
+        // This variable will be over 0
+        // if player gained more experience
+        // than required for next level
+        over=ply1\exp - ply1\nexp
+        ply1\exp=over 'Correct the new experience
+        
+        ply1\lev=ply1\lev+1 'Add level
+        PlaySound aSound(SOUND_LEVELUP),gSfxVolume
+    EndIf
+    
+    ply1\nexp = GetNExp(Float(ply1\lev)) 'Get required experience
+    
+    collision_ang#=PLY_CheckCollisionEnemy(ConvertToInteger(ply1))
+    If collision_ang<>-1 Then
+        xvel =  Cos(collision_ang)*-(ply1\svel)
+        yvel = -Sin(collision_ang)*-(ply1\svel)
+    EndIf
+    
+    // CHECK FOR BULLET COLLISIONS
+    b.BULLET = First(BULLET)
+    While b<>NULL
+    'For b.BULLET = Each BULLET
+        If Not b\friendly Then
+            If ImagesCollide(_ship_Images(SHIP_GetID(ply1\ship),image_ang),ply1\x,ply1\y,0, _bullet_Images(b\id,b\image_ang),b\x,b\y,0) Then
+                b\alive=False
+
+                xvel = xvel + Cos(b\d)*(ply1\svel*2)
+                yvel = yvel - Sin(b\d)*(ply1\svel*2)
+                
+                PlayGameSound(SOUND_HIT3, ply1\x,ply1\y)
+                If ply1\shi>0.0 Then
+                    ply1\shi=ply1\shi-b\dam/gDifficulty
+                ElseIf ply1\arm>0.0 Then
+                    ply1\arm=ply1\arm-b\dam/gDifficulty
+                ElseIf ply1\h>0.0 Then
+                    ply1\h=ply1\h-b\dam/gDifficulty
+                EndIf
+            EndIf
+        EndIf
+        b=After(b)
+    'Next b
+    Wend
+        
+Return
+
+DoublePix:
+    DrawGame
+    PositionCamera 320, -240
+    For i = 240 To 0 Step -1
+        CopyBox 0, i, 320, 2, 0, i*2
+    Next i
+    
+    For i = 320 To 0 Step -1
+        CopyBox i,0,2,480,i*2,0
+    Next i
+Return
+
+//DEBUG CONSOLE vvvv
+DebugConsole:
+    StopAllSounds()
+    BlockyScreen(1,5.0)
+    DrawScreen OFF
+    CopyBox 0,0,640,480,0,0,SCREEN(),Image(gPause_Image)
+    DrawImage ScaleImage(gPause_Image,321,241),0,0
+
+    SetFont aFont(FONT_CONSOLE)
+    
+    ClearKeys
+    
+    Repeat
+        DrawImage ScaleImage(gPause_Image,320,240),0,0
+
+        Color 25,25,25
+        Box 0,0,SW,24
+        Color 255,255,255
+        Locate 0,12
+        command$=Input("> ")
+        Text 0,0,gConsoleOut
+        
+        If KeyHit(cbKeyReturn)
+            com$ = Lower(GetWord(command,1))
+            If com="ply_change_level" Then
+                ply1\lev=Int(GetWord(command,2))
+                gConsoleOut="Current level changed: "+GetWord(command,2)
+            ElseIf com="ply_change_damage" Then
+                _wep.WEP = ConvertToType(ply1\weapon)
+                _wep\dam = Int(GetWord(command,2))
+                gConsoleOut="Current damage changed: "+GetWord(command,2)
+            Else
+                gConsoleOut=GetWord(command,1)+" is invalid command."
+            EndIf
+            CloseInput
+            ClearKeys
+        EndIf
+        
+        DrawScreen
+    Until KeyHit(41)
+    CloseInput
+    ClearKeys
+    gConsole=0
+Return
+//DEBUG CONSOLE ^^^^
+
+Global gBackGroundX#,gBackGroundY#
+Function DrawBackground(img)
+    gBackGroundX+.3
+    gBackGroundY+.1
+    If gBackGroundX>ImageWidth(img) Then gBackGroundX=0
+    If gBackGroundY>ImageHeight(img) Then gBackGroundY=0
+    DrawImage img,-gBackGroundX    ,-gBackGroundY
+    DrawImage img,-gBackGroundX    ,SH*2-gBackGroundY
+    DrawImage img,SW*2-gBackGroundX,-gBackGroundY
+    DrawImage img,SW*2-gBackGroundX,SH*2-gBackGroundY
+EndFunction
+
+
+PlyDie:
+    If ply1\h<0.1 Then
+        StopSound ply1\thrust
+        StopAllSounds()
+        StopSound gMusic
+        PlayGameSound(SOUND_PLYDIE,ply1\x,ply1\y)
+        Color 25,25,25
+        Box SW/2-50,SH/2-30,100,60
+        Color 128,128,128
+        Box SW/2-50,SH/2-30,100,60,0
+        CenterText SW/2,SH/2,"YOU DIED! D:",2
+        BlockyScreen(1,5.0)
+        ClearKeys
+        DrawScreen
+        SAFEEXIT ON
+        Repeat
+        Forever
+    EndIf
+Return

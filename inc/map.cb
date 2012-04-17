@@ -1,0 +1,290 @@
+Type BACK_TILE
+    Field x As Float
+    Field y As Float
+    Field id As Byte
+EndType
+
+Type OVER_TILE
+    Field x As Float
+    Field y As Float
+    Field id As Byte
+EndType
+
+Type DATA_TILE
+    Field x As Float
+    Field y As Float
+    Field id As Byte
+EndType
+
+Type HIT_TILE
+    Field x As Float
+    Field y As Float
+    Field hit As Byte
+EndType
+
+Const DATA_PLAYER_SPAWN = 1
+Const DATA_NEXT_MAP = 255
+
+Global tileset_name As String, gMapImage_Back,gMapImage_Over
+Global MAX_TILES, gMapWidth,gMapHeight
+Dim _tile(1)
+
+Function MAP_LoadMap(name As String)
+
+    gEnemiesKilled=0
+
+    If gMapImage_Back Then DeleteImage gMapImage_Back
+    If gMapImage_Over Then DeleteImage gMapImage_Over
+
+    For tbt.BACK_TILE = Each BACK_TILE
+        Delete tbt
+    Next tbt
+    For tot.OVER_TILE = Each OVER_TILE
+        Delete tot
+    Next tot
+    For tht.HIT_TILE = Each HIT_TILE
+        Delete tht
+    Next tht
+    For tdt.DATA_TILE = Each DATA_TILE
+        Delete tdt
+    Next tdt
+
+    f=OpenToRead(name)
+    
+    tileset_name=ReadString(f)
+    MAP_LoadTileset(tileset_name)
+    
+    mapW = ReadByte(f)
+    mapH = ReadByte(f)
+    
+    gMapWidth=mapW
+    gMapHeight=mapH
+    
+    gMapImage_Back = MakeImage(mapW*16,mapH*16)
+    gMapImage_Over = MakeImage(mapW*16,mapH*16)
+    
+    gTotalItems=gTotalItems+mapH
+    
+    For y=0 To mapH-1
+    For x=0 To mapW-1
+        id=ReadByte(f)
+        over=ReadByte(f)
+        hit=ReadByte(f)
+        _data=ReadByte(f)
+        If id>0 Then
+            bt.BACK_TILE=New(BACK_TILE)
+            bt\x=x*16
+            bt\y=y*16
+            bt\id=id
+            DrawToImage gMapImage_Back
+                DrawImage _tile(bt\id),x*16,y*16
+            DrawToScreen
+        EndIf
+        If over>0 Then
+            ot.OVER_TILE=New(OVER_TILE)
+            ot\x=x*16
+            ot\y=y*16
+            ot\id=over
+            DrawToImage gMapImage_Over
+                DrawImage _tile(ot\id),x*16,y*16
+            DrawToScreen
+        EndIf
+        If _data>0 Then
+            dt.DATA_TILE=New(DATA_TILE)
+            dt\x=x*16
+            dt\y=y*16
+            dt\id=_data
+        EndIf
+        If hit=1 Then
+            ht.HIT_TILE = New(HIT_TILE)
+            ht\x=x*16
+            ht\y=y*16
+            ht\hit=hit
+        EndIf
+    Next x
+    UpdateLoading("map")
+    Next y
+    
+    MAP_GetInitError(MAP_InitMapData())
+    
+    CloseFile f
+EndFunction
+
+Function MAP_GetInitError(_data)
+EndFunction
+
+Function MAP_InitMapData()
+    For dt.DATA_TILE = Each DATA_TILE
+        If dt\id = DATA_PLAYER_SPAWN Then
+            For ply1.PLY = Each PLY
+                ply1\x = dt\x
+                ply1\y = dt\y
+            Next ply1
+        EndIf
+    Next dt
+EndFunction
+
+Function MAP_LoadTileset(name As String)
+    img = LoadImage("gfx/"+name)
+    
+    tsW = ImageWidth(img)/16
+    tsH = ImageHeight(img)/16
+    
+    MAX_TILES=tsW*tsH+1
+    ClearArray ON
+    ReDim _tile(MAX_TILES)
+    gTotalItems=gTotalItems+tsH
+    
+    _tile(0)=MakeImage(16,16)
+    DrawToImage _tile(0)
+        Color 1,1,1
+        Box 0,0,16,16
+    DrawToScreen
+    
+    y=0
+    While y<tsH
+    'For y=0 To tsH-1
+    x=0
+    While x<tsW
+    'For x=0 To tsW-1
+        i=1+x+(y*tsW)
+        _tile(i)=MakeImage(16,16)
+        MaskImage _tile(i),255,0,255
+        DrawToImage _tile(i)
+            'DrawImageBox img,0,0,x*16,y*16,16,16
+            DrawImage img,x*-16,y*-16
+        DrawToScreen
+        x+1
+    'Next x
+    Wend
+    UpdateLoading("tileset")
+    y+1
+    'Next y
+    Wend
+EndFunction
+
+Function MAP_GetPreciseTile(x#,y#,_layer=2)
+    Select _layer
+        Case 2
+            ht.HIT_TILE = First(HIT_TILE)
+            While ht<>NULL
+            'For ht.HIT_TILE=Each HIT_TILE
+                If Distance(x,y,ht\x,ht\y)<=8 Then
+                    Return ht\hit
+                EndIf
+                ht=After(ht)
+            'Next ht
+            Wend
+    EndSelect
+    Return 0
+EndFunction
+
+Function MAP_GetTileID2(x,y,_layer=2)
+    Select _layer
+        Case 2
+            ht.HIT_TILE = First(HIT_TILE)
+            While ht<>NULL
+                If x=Int(ht\x/16) And y=Int(ht\y/16) Then
+                    Return ht\hit
+                EndIf
+                ht=After(ht)
+            Wend
+    EndSelect
+    Return 0
+EndFunction
+
+Function MAP_GetTileID(x#,y#,_layer=0)
+    sx = RoundDown(x/16)
+    sy = RoundDown(y/16)
+
+    Select _layer
+        case 0
+            For bt.BACK_TILE=Each BACK_TILE
+                If bt\x/16 = sx And bt\y/16 = sy Then
+                    Return bt\id
+                EndIf
+            Next bt
+        Case 1
+            For ot.OVER_TILE=Each OVER_TILE
+                If ot\x/16 = sx And ot\y/16 = sy Then
+                    Return ot\id
+                EndIf
+            Next ot
+        Case 2
+            For ht.HIT_TILE=Each HIT_TILE
+                If ht\x/16 = sx And ht\y/16 = sy Then
+                    Return ht\hit
+                EndIf
+            Next ht
+        Case 3
+            For dt.DATA_TILE=Each DATA_TILE
+                If dt\x/16 = sx And dt\y/16 = sy Then
+                    Return dt\id
+                EndIf
+            Next dt
+    EndSelect
+    Return 0
+EndFunction
+
+
+
+Function MAP_EditTileID(x#,y#,newID,_layer=0)
+    sx = RoundDown(x/16)
+    sy = RoundDown(y/16)
+
+    Select _layer
+        Case 0
+            For bt.BACK_TILE=Each BACK_TILE
+                If bt\x/16 = sx And bt\y/16 = sy Then
+                    bt\id=newID
+                    Return 1
+                EndIf
+            Next bt
+        Case 1
+            For ot.OVER_TILE=Each OVER_TILE
+                If ot\x/16 = sx And ot\y/16 = sy Then
+                    ot\id=newID
+                    Return 1
+                EndIf
+            Next ot
+        Case 2
+            For ht.HIT_TILE=Each HIT_TILE
+                If ht\x/16 = sx And ht\y/16 = sy Then
+                    ht\hit=newID
+                    Return 1
+                EndIf
+            Next ht
+        Case 3
+            For dt.DATA_TILE=Each DATA_TILE
+                If dt\x/16 = sx And dt\y/16 = sy Then
+                    dt\id=newID
+                    Return 1
+                EndIf
+            Next dt
+    EndSelect
+    Return 0
+EndFunction
+
+Global gCameraX#,gCameraY#
+Function MAP_DrawMap(_layer=0)
+    Select _layer
+        Case 0
+            DrawImageBox gMapImage_Back,0,0,-gCameraX+8,-gCameraY+8,320,240
+            'For bt.BACK_TILE=Each BACK_TILE
+            '    x#=bt\x+gCameraX
+            '    y#=bt\y+gCameraY
+            '    If x>-16 And x<336 And y>-16 And y<256 Then
+            '        DrawImage _tile(bt\id),x-8,y-8
+            '    EndIf
+            'Next bt
+        Case 1
+            DrawImageBox gMapImage_Over,0,0,-gCameraX+8,-gCameraY+8,320,240
+            'For ot.OVER_TILE=Each OVER_TILE
+            '    x#=ot\x+gCameraX
+            '    y#=ot\y+gCameraY
+            '    If x>-16 And x<336 And y>-16 And y<256 Then
+            '        DrawImage _tile(ot\id),x-8,y-8
+            '    EndIf
+            'Next ot
+    EndSelect
+EndFunction

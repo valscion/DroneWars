@@ -1,0 +1,118 @@
+'Powerups
+
+// wep_pwup1 = increase firespeed for 30s
+// wep_pwup2 = increase damage for 15s
+// wep_pwup3 = decrease recoil for 30s
+
+Global gWeaponPowerup As Integer
+Global gWeaponPwupTimer As Integer
+Global gShipPowerup As Integer
+Global gShipPwupTimer As Integer
+
+Global gPwups
+
+Dim _pwup_Images(1,1)
+Dim _pwup_Data(1,1)
+
+Type PWUP
+    Field id
+    Field alive
+    Field x As Float
+    Field y As Float
+    Field d As Float
+    Field ftimer 'fade tiemr
+    Field btimer 'blink timer
+    Field blink
+    Field wepup 'Type of the power-up, weapon related
+    Field shpup 'Type of the power-up, ship related
+    Field durat 'Duration of the power-up
+EndType
+
+Function PWUP_Init()
+    file$="ini\pwups.ini"
+    count=iniReadInt(file,"other","count")
+    gPwups=count
+    
+    ReDim _pwup_Images(count,MAX_ANGLES)
+    ReDim _pwup_Data(count,3)
+    
+    For i=0 To count-1
+        section$="pwup"+i
+        
+        _pwup_Data(i,0)=iniReadInt(file,section,"wepup")
+        _pwup_Data(i,1)=iniReadInt(file,section,"shpup")
+        _pwup_Data(i,2)=iniReadInt(file,section,"durat")
+        
+        img  =LoadImage(iniReadString(file,section,"img"))
+        MaskImage img,255,0,255
+        
+        For k=0 To MAX_ANGLES-1
+            ang_plus=360/MAX_ANGLES
+            _pwup_Images(i,k)=CloneImage(img)
+            RotateImage _pwup_Images(i,k),-(k*ang_plus)
+        Next k
+        
+        DeleteImage img
+        
+    Next i
+EndFunction
+
+Function PWUP_Create(id,x,y)
+    pup.PWUP = New(PWUP)
+    pup\alive=True
+    pup\ftimer=Timer()+15000
+    pup\blink=True
+    pup\id=id
+    pup\x=x
+    pup\y=y
+    pup\d=Rand(360)
+    pup\wepup=_pwup_Data(id,0)
+    pup\shpup=_pwup_Data(id,1)
+    pup\durat=_pwup_Data(id,2)
+EndFunction
+
+Function PWUP_Update()
+    If gWeaponPowerup>0 Then
+        If Timer()>gWeaponPwupTimer Then PlayGameSound(SOUND_PWUP2):gWeaponPowerup=0
+    EndIf
+    If gShipPowerup>0 Then
+        If Timer()>gShipPwupTimer Then PlayGameSound(SOUND_PWUP2):gShipPowerup=0
+    EndIf
+    
+    For pup.PWUP=Each PWUP
+        x#=pup\x+gCameraX
+        y#=pup\y+gCameraY
+        pup\d=WrapAngle(pup\d+10)
+        
+        If x>0 And x<SW And y>0 And y<SH And pup\blink Then
+            ang=360/MAX_ANGLES
+            image_ang=Min(Max(Int(pup\d/ang),0),MAX_ANGLES-1)
+            img=_pwup_Images(pup\id,image_ang)
+            DrawImage img,x,y
+            
+            For ply1.PLY = Each PLY
+                image_ang=Min(Max(Int(ply1\d/ang),0),MAX_ANGLES-1)
+                plyimg=_ship_Images(SHIP_GetID(ply1\ship),image_ang)
+                If ImagesCollide(img,pup\x,pup\y,OFF, plyimg,ply1\x,ply1\y,OFF) Then
+                    If pup\wepup>0 Then gWeaponPowerup=pup\wepup:gWeaponPwupTimer = Timer()+pup\durat
+                    If pup\shpup>0 Then gShipPowerup=pup\shpup:gShipPwupTimer = Timer()+pup\durat
+                    pup\alive=False
+                    PlayGameSound(SOUND_PWUP1)
+                EndIf
+            Next ply1
+                
+        EndIf
+        
+        If pup\ftimer-Timer()<=2000 And Timer()>pup\btimer Then
+            pup\blink=Not pup\blink
+            pup\btimer=Timer()+100
+        EndIf
+        If Timer()>pup\ftimer Then pup\alive=False
+    Next pup
+    For pup.PWUP=Each PWUP
+        If pup\alive=False
+            Delete pup
+        EndIf
+    Next pup
+EndFunction
+    

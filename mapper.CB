@@ -1,0 +1,380 @@
+// MAPPER ID LIST
+// 0        = Empty
+// 1        = Player spawn
+
+// 10-19    = Enemy ID 0-9 spawnpoint
+// 20-29    = Enemy ID 10-19 spawnpoint
+
+// 30-39    = Powerup ID 0-9 spawnpoint
+// 40-49    = Powerup ID 10-19 spawnpoint
+
+// 101-149  = Multi-enemy spawnpoint (100=point, id-100=how many enemies will spawn)
+
+// 150-250  = Map event triggers
+
+// 254      = Portal to next map (locked)
+// 255      = Portal to next map (opened)
+
+
+// TileMap file structure
+// **********************
+
+// string: tileset filename
+// byte: map width
+// byte: map height
+
+// for y=1 to map height
+// for x=1 to map width
+//   byte: back-layer tile id
+//   byte: over-layer tile id
+//   byte: hit-layer tile id
+//   byte: data-layer tile id
+
+
+
+SCREEN 960,720,0,1
+SCREEN 640,480,0,2
+
+norm=LoadFont("mints-strong")
+cons=LoadFont("mints-strong")
+datatile=LoadFont("mints-strong")
+SetFont(norm)
+
+Const SW=320
+Const SH=240
+Const LAYERS=4
+
+Dim _map(1,1,LAYERS)
+Dim tmp_map(1,1,LAYERS)
+Global mapW,mapH
+mapW=5
+mapH=5
+
+Global MAX_TILES,tsW,tsH,tileset_name$,_layer
+MAX_TILES=1
+tileset_name=""
+Dim _tile(MAX_TILES)
+_curTile=0
+
+ResizeMap(mapW,mapH)
+For y=0 To mapH-1
+For x=0 To mapW-1
+    _map(x,y,0)=0
+    _map(x,y,1)=0
+    _map(x,y,2)=0
+    _map(x,y,3)=0
+Next x
+Next y
+
+ConsoleOut$=""
+
+Global gY#,_data
+
+Repeat
+    
+    If Not console
+        If KeyDown(cbKeyLShift) Then
+            If KeyDown(cbKeyLeft)    Then cx-1:camX+1
+            If KeyDown(cbKeyRight)   Then cx+1:camX-1
+            If KeyDown(cbKeyUp)      Then cy-1:camY+1
+            If KeyDown(cbKeyDown)    Then cy+1:camY-1    
+        Else
+            If KeyHit(cbKeyLeft)    Then cx-1
+            If KeyHit(cbKeyRight)   Then cx+1
+            If KeyHit(cbKeyUp)      Then cy-1
+            If KeyHit(cbKeyDown)    Then cy+1
+        EndIf
+        
+        If KeyHit(cbKeyF) Then Fill(_curTile,cx,cy)
+
+        If KeyHit(cbKeyA) And _curTile<MAX_TILES-1 Then _curTile+1
+        If KeyHit(cbKeyZ) And _curTile>0 Then _curTile-1
+        If KeyDown(cbKeyS) And _curTile<MAX_TILES-1 Then _curTile+1
+        If KeyDown(cbKeyX) And _curTile>0 Then _curTile-1
+        
+        If KeyDown(cbKeySpace) Then _map(cx,cy,_layer)=_curTile
+        If KeyHit(cbKeyH)     Then _map(cx,cy,2)=Not _map(cx,cy,2)
+        If KeyHit(cbKeyD)       Then _map(cx,cy,3)=_data
+        
+        If KeyHit(cbKey1) Then _layer=0
+        If KeyHit(cbKey2) Then _layer=1
+        'If KeyHit(cbKey3) Then _layer=3
+    EndIf
+    
+    If Not console Then gY=CurveValue(0,gY,10)  
+    
+    If KeyHit(cbKeyC) Then
+        If console Then CloseInput:ClearKeys
+        console=Not console
+        consoleH#=0
+        Locate 0,12
+        ClearKeys
+    EndIf
+    
+    If cx>mapW-1 Then cx=mapW-1
+    If cx<0 Then cx=0
+    If cy>mapH-1 Then cy=mapH-1
+    If cy<0 Then cy=0
+    
+    For y=0 To mapH-1    
+    For x=0 To mapW-1
+        If _map(x,y,0)>0 Then DrawImage _tile(_map(x,y,0)), (camX+x)*16, gY+(camY+y)*16
+        If _map(x,y,1)>0 Then DrawImage _tile(_map(x,y,1)), (camX+x)*16, gY+(camY+y)*16
+    Next x
+    Next y
+    For y=0 To mapH-1    
+    For x=0 To mapW-1
+        If _map(x,y,2)=1 Then
+            Color 255,0,255
+            Box (camX+x)*16,gY+(camY+y)*16,16,16,0
+            Box (camX+x)*16+1,gY+(camY+y)*16+1,14,14,0
+        EndIf
+    Next x
+    Next y
+    
+    Color 255,255,255
+    Box (camX+cx)*16,gY+(camY+cy)*16, 16,16, 0
+    
+    DoublePix()
+    
+    
+    For y=0 To mapH-1
+    For x=0 To mapW-1
+        Color 64,64,64
+        Box (camX+x)*32-1, ty+(camY+y)*32-1, 33, 33,0
+        If _map(x,y,3)>0 Then SetFont(datatile):Color 255,255,255:Text (camX+x)*32+8, ty+(camY+y)*32+8, _map(x,y,3)
+    Next x
+    Next y
+    
+    // SIDEBAR
+    Color 15,15,15
+    Box (SW-100)*2,gY*2,200,SH*2
+    If _curTile>0 Then DrawImage _tile(_curTile),(SW-90)*2,(gY+10)*2
+    
+    Color 200,200,200
+    tx=SW*2-190
+    ty=gY*2
+    Text tx,ty+36,"+S/-X = FastChange Tile"
+    Text tx,ty+48,"+A/-Z = Change Tile"
+    Text tx,ty+60,"H = Hit ON/OFF"
+    Text tx,ty+72,"C = Console"
+    Text tx,ty+84,"SPACE = Paint"
+    Text tx,ty+96,"LSHIFT+ARROWS = Move camera"
+    Text tx,ty+108,"1 = Back-layer"
+    Text tx,ty+120,"2 = Over-layer"
+    Text tx,ty+132,"F = Fill"
+
+    Color 30,30,30
+    Box 0,0,SW*2,gY*2
+    
+    If console Then
+        consoleH=CurveValue(24,consoleH,10)
+        Color 255,255,255
+        SetFont(cons)
+        If consoleH*2>23.5 Then command$=Input("> ")
+        Text 4,consoleH*2-24,ConsoleOut
+        SetFont(norm)
+        
+        gY=consoleH
+        
+        If KeyHit(cbKeyReturn)
+            com$ = Lower(GetWord(command,1))
+            Select com
+                Case "mapw"
+                    mW = GetWord(command,2):ResizeMap(mW,mapH)
+                    ConsoleOut="Map resized: new width="+mW
+                Case "maph"
+                    mH = GetWord(command,2):ResizeMap(mapW,mH)
+                    ConsoleOut="Map resized: new height="+mH
+                Case "help"
+                    If CountWords(command)>1
+                        Select GetWord(command,2)
+                            Case "mapw"
+                                ConsoleOut="Usage: mapw <width>"
+                            Case "maph"
+                                ConsoleOut="Usage: maph <height>"
+                            Case "save"
+                                ConsoleOut="Usage: save <filepath>"
+                            Case "load"
+                                ConsoleOut="Usage: load <filepath>"
+                            Case "dat"
+                                ConsoleOut="Usage: dat <value>"
+                            Case "tileset"
+                                ConsoleOut="Usage: tileset <tileset_filepath>"
+                            Default
+                                ConsoleOut="Command not found! See 'help'."
+                        EndSelect
+                    Else
+                        ConsoleOut="help <cmd>, mapw, maph, save, load, dat, tileset"
+                    EndIf
+                Case "save"
+                    name$ = GetWord(command,2):_SaveMap(name,mapW,mapH)
+                    ConsoleOut="Map saved as "+name+".map"
+                Case "load"
+                    name = GetWord(command,2):_LoadMap(name)
+                    ConsoleOut="Loaded map: "+name+".map"
+                Case "tileset"
+                    tileset_name = GetWord(command,2):_LoadTileset(tileset_name)
+                    ConsoleOut="Loaded tileset: "+tileset_name
+                Case "dat"
+                    _data=Int(GetWord(command,2))
+                    ConsoleOut="Datatile value: "+_data
+                Default
+                    ConsoleOut=GetWord(command,1)+" is invalid command. See 'help'."
+            EndSelect
+            CloseInput
+            ClearKeys
+        EndIf
+    EndIf
+    
+    DrawScreen
+Forever
+
+Function ResizeMap(w,h)
+    ClearArray ON
+
+    'Redim the temp array and get all the data
+    ReDim tmp_map(w,h,LAYERS)
+    For y=0 To maph-1
+    For x=0 To mapw-1
+        tmp_map(x,y,0)=_map(x,y,0) 'back
+        tmp_map(x,y,1)=_map(x,y,1) 'over
+        tmp_map(x,y,2)=_map(x,y,2) 'hit
+        tmp_map(x,y,3)=_map(x,y,3) 'data
+    Next x
+    Next y
+    
+    ReDim _map(w,h,LAYERS)
+    
+    'Put the data back
+    For y=0 To h-1
+    For x=0 To w-1
+        If x>mapw Or y>maph Then
+            _map(x,y,0)=0
+            _map(x,y,1)=0
+            _map(x,y,2)=0
+            _map(x,y,3)=0
+        Else
+            _map(x,y,0)=tmp_map(x,y,0) 'back
+            _map(x,y,1)=tmp_map(x,y,1) 'over
+            _map(x,y,2)=tmp_map(x,y,2) 'hit
+            _map(x,y,3)=tmp_map(x,y,3) 'data
+        EndIf
+    Next x
+    Next y
+    
+    mapW = w
+    mapH = h
+    
+EndFunction
+
+Function _LoadTileset(name As String)
+    img = LoadImage("gfx/"+name)
+    
+    tsW = ImageWidth(img)/16
+    tsH = ImageHeight(img)/16
+    
+    MAX_TILES=tsW*tsH+1
+    ClearArray ON
+    ReDim _tile(MAX_TILES)
+    
+    _tile(0)=MakeImage(16,16)
+    MaskImage _tile(0),1,1,1
+    DrawToImage _tile(0)
+        Color 0,0,0
+        Box 0,0,16,16
+    DrawToScreen
+    
+    For y=0 To tsH-1
+    For x=0 To tsW-1
+        i=1+x+(y*tsW)
+        _tile(i)=MakeImage(16,16)
+        MaskImage _tile(i),255,0,255
+        DrawToImage _tile(i)
+            DrawImageBox img,0,0,x*16,y*16,16,16
+        DrawToScreen
+    Next x
+    Next y
+    
+    ConsoleOut=ConsoleOut+" "+tsW+"x"+tsH
+EndFunction
+    
+
+Function _SaveMap(name As String,mw,mh)
+    f=OpenToWrite(name+".map")
+    
+    WriteString f,tileset_name
+    WriteByte f,mw
+    WriteByte f,mh
+    
+    For y=0 To mh-1
+    For x=0 To mw-1
+        WriteByte f,_map(x,y,0)
+        WriteByte f,_map(x,y,1)
+        WriteByte f,_map(x,y,2)
+        WriteByte f,_map(x,y,3)
+    Next x
+    Next y
+    
+    CloseFile f
+EndFunction
+
+Function _LoadMap(name As String)
+    f=OpenToRead(name+".map")
+    
+    tileset_name=ReadString(f)
+
+    _LoadTileset(tileset_name)
+    
+    mapW = ReadByte(f)
+    mapH = ReadByte(f)
+    
+    ResizeMap(mapW,mapH)
+    
+    For y=0 To mapH-1
+    For x=0 To mapW-1
+        _map(x,y,0)=ReadByte(f)
+        _map(x,y,1)=ReadByte(f)
+        _map(x,y,2)=ReadByte(f)
+        _map(x,y,3)=ReadByte(f)
+    Next x
+    Next y
+    
+    CloseFile f
+EndFunction
+
+Function DoublePix()
+    DrawGame
+    PositionCamera 320, -240
+    For i = 240 To 0 Step -1
+        CopyBox 0, i, 320, 2, 0, i*2
+    Next i
+    
+    For i = 320 To 0 Step -1
+        CopyBox i,0,2,480,i*2,0
+    Next i
+EndFunction
+
+Global gOldTile
+Function Fill(tile,x,y,_layer=0,start=1)
+    If x<0 Then Return 0
+    If y<0 Then Return 0
+    If x>mapW Then Return 0
+    If y>mapH Then Return 0
+    If start Then
+        gOldTile=_map(x,y,_layer)
+    EndIf
+    If _map(x,y,_layer)=gOldTile Then
+        _map(x,y,_layer)=tile
+        Fill(tile,x+1,y  ,_layer,0)
+        Fill(tile,x  ,y+1,_layer,0)
+        'Fill(tile,x+1,y+1,_layer,0)
+        Fill(tile,x-1,y  ,_layer,0)
+        Fill(tile,x  ,y-1,_layer,0)
+        'Fill(tile,x-1,y-1,_layer,0)
+    EndIf
+EndFunction
+
+    
+    
+    

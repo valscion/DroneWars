@@ -1,0 +1,119 @@
+'INTRO STUFF
+
+Intro()
+Function Intro()
+    galaxy=LoadImage("gfx\galaxy.png")
+    planet1=LoadImage("gfx\planet1.png")
+    dimmer=MakeImage(320,240)
+    MaskImage dimmer,255,0,255
+    MaskImage planet1,255,0,255
+    
+    gTotalItems=43
+    loaded=0
+    
+    f1=OpenToRead("ini\intro1.txt")
+    f2=OpenToRead("ini\intro2.txt")
+    introtext1$=""
+    introtext2$=""
+        While Not EOF(f1)
+            introtext1=introtext1+ReadLine(f1)
+            UpdateLoading("intro")
+        Wend
+        While Not EOF(f2)
+            introtext2=introtext2+ReadLine(f2)
+            UpdateLoading("intro")
+        Wend
+    CloseFile f2
+    CloseFile f1
+    
+    
+    
+    introtext_image1 = ImageFontText(introtext1,1)
+    UpdateLoading("intro")
+    introtext_image2 = ImageFontText(introtext2,1)
+    UpdateLoading("intro")
+    
+    _dim#=100
+    text_y#=240
+    
+    intro_volume#=gMsxVolume
+    gMusic = PlaySound("sfx/dw-intro.xm",intro_volume)
+    UpdateLoading("intro")
+    
+    scroll_timer=Timer()+4000
+    
+    _exiting=False
+    
+    phase=1
+    
+    Repeat
+        Color 0,0,0
+        Box 0,0,320,240
+        If phase=1 Or phase=2
+            DrawImage galaxy,0,12
+            DrawImage introtext_image1,3,text_y
+        ElseIf phase=3
+            planet_scale#=CurveValue(96,planet_scale,100)
+            planet_s#=planet_scale/96.0*100.0
+            temp_planet=ScaleImage(planet1,planet_s,planet_s)
+            DrawImage temp_planet,SW/2-ImageWidth(temp_planet)/2,SH/2-ImageHeight(temp_planet)/2
+            DrawImage introtext_image2,3,text_y
+        EndIf
+        
+        Color 0,0,0
+        Box 0,0,320,12
+        Box 0,228,320,13
+    
+        If _exiting=False Then
+            If phase=1
+                _dim=CurveValue(0,_dim,100)
+            ElseIf phase=2
+                _dim=CurveValue(100,_dim,10)
+                If _dim=>99.9 Then phase=3:text_y=240
+            ElseIf phase=3
+                _dim=CurveValue(0,_dim,25)
+            'ElseIf phase=4
+            '    _dim=CurveValue(100,_dim,25)
+            '    intro_volume=CurveValue(0,intro_volume,25)
+            EndIf
+        Else
+            intro_volume=CurveValue(0,intro_volume,15)
+            SetSound gMusic,OFF,intro_volume
+            _dim=CurveValue(100,_dim,15)
+        EndIf
+        
+        DrawGhostImage dimmer,1,1,OFF,_dim
+        
+        If Timer()>scroll_timer Then
+            If text_y<=0 And phase=1 Then
+                phase=2
+            EndIf
+            If text_y<=0 And phase=3 Then
+                'phase=4
+                _exiting=True
+            EndIf
+            text_y=text_y-1
+            scroll_timer=Timer()+150
+        EndIf
+        
+        If _dim>99 And _exiting=True Then StopSound gMusic:Return 0
+        
+        For i=1 To 221
+            If KeyHit(i) Then _exiting=True
+        Next i
+        
+        DrawGame
+        PositionCamera 320, -240
+        For i = 240 To 0 Step -1
+            CopyBox 0, i, 320, 2, 0, i*2
+        Next i
+        
+        For i = 320 To 0 Step -1
+            CopyBox i,0,2,480,i*2,0
+        Next i
+        DrawScreen
+    Forever
+
+
+    End
+EndFunction

@@ -1,0 +1,131 @@
+Type PLY 'Player
+    Field ship As Integer   'Ship typevar
+    'Field name As String    'Player's name
+    Field img As Integer    'Ply img
+    Field x As Float        'Pos X
+    Field y As Float        'Pos Y
+    Field d As Float        'Direction
+    Field s As Float        'Speed
+    Field svel As Float     'Speed velocity
+    Field maxs As Float     'Max speed
+    
+    Field h As Float        'Health
+    Field arm As Float      'Armor
+    Field shi As Float      'Shield
+    
+    Field slot1 As integer  'Ships weapon slots (under ship)
+    Field slot2 As integer  'Ships weapon slots (on-top ship)
+    
+    Field weapon As integer    'Current weapon ID
+    
+    Field lev As Byte       'Current level
+    Field exp As Integer    'Current XP
+    Field nexp As Integer   'Needed XP (for next level)
+    
+    Field thrust As Integer 'Sound related
+End Type
+
+Goto skip
+PLY_CreatePlayer:
+    ply1.PLY         = New(PLY)
+    ply1\ship        = SHIP_GetHandler(0)
+    
+    'ply1\x           = 160.0
+    'ply1\y           = 120.0
+    ply1\d           = 90.0
+    ply1\s           = 0.0
+    
+    temp_ship.SHIP   = ConvertToType(ply1\ship)
+    ply1\img         = temp_ship\img     'Ship img
+    ply1\svel        = temp_ship\svel    'Default acceleration speed
+    ply1\maxs        = temp_ship\maxs
+    ply1\h           = temp_ship\h       'Default health
+    ply1\arm         = temp_ship\arm     'Default armor
+    ply1\shi         = temp_ship\shi     'Default shield
+    ply1\slot1       = temp_ship\slot1
+    ply1\slot2       = temp_ship\slot2
+    
+    
+    ply1\weapon      = WEP_GetHandle(0)
+    
+    ply1\lev         = 1                 'Default level
+    ply1\exp         = 0
+    ply1\nexp        = GetNExp(Float(ply1\lev))
+Return
+skip:
+
+
+Global gCollisionID
+Dim PLY_Collisions(128,2)
+Function PLY_CollisionMap(objID, spex#,spey#)
+    obj.PLY = ConvertToType(objID)
+
+    For i=0 To gCollisionID-1
+        PLY_Collisions(i,0)=-1
+        PLY_Collisions(i,1)=0
+    Next i
+
+    gCollisionID=0
+    iw=ImageWidth(obj\img)
+    ih=ImageHeight(obj\img)
+    
+    For ht.HIT_TILE = Each HIT_TILE
+        If ht\hit=1 Then
+            If BoxOverlap(obj\x-4+spex,obj\y-4+spey,iw,ih, ht\x-8,ht\y-8,16,16) Then
+                ang=Int(GetAngle(obj\x+spex,obj\y+spey,ht\x,ht\y))
+                If ang>=315 Or ang<=45 Then colang=0
+                If ang>=45 And ang<=135 Then colang= 1
+                If ang>=135 And ang<=225 Then colang= 2
+                If ang>=225 And ang<=315 Then colang= 3
+                
+                PLY_Collisions(gCollisionID,0)=colang
+                PLY_Collisions(gCollisionID,1)=ang
+                gCollisionID+1
+            EndIf
+        EndIf
+    Next ht
+    
+    For mobj.MAPOBJ = Each MAPOBJ
+        If mobj\img>0 Then
+            If BoxOverlap(obj\x-4+spex,obj\y-4+spey,iw,ih, mobj\x-8,mobj\y-8,16,16) Then
+                ang=Int(GetAngle(obj\x+spex,obj\y+spey,mobj\x,mobj\y))
+                If ang>=315 Or ang<=45 Then colang=0
+                If ang>=45 And ang<=135 Then colang= 1
+                If ang>=135 And ang<=225 Then colang= 2
+                If ang>=225 And ang<=315 Then colang= 3
+                
+                PLY_Collisions(gCollisionID,0)=colang
+                PLY_Collisions(gCollisionID,1)=ang
+                gCollisionID+1
+            EndIf
+        EndIf
+    Next mobj
+    
+    Return gCollisionID
+EndFunction
+
+Function PLY_GetCollision(index,_type=0)
+    Return PLY_Collisions(index,_type)
+EndFunction
+
+Function PLY_CheckCollisionEnemy#(objID)
+    obj.PLY = ConvertToType(objID)
+    For en.ENEMY = Each ENEMY
+        If ImagesCollide(obj\img,obj\x,obj\y,0, _enemy_Images(en\id,0),en\x,en\y,0) Then
+            Return GetAngle(obj\x,obj\y,en\x,en\y)
+        EndIf
+    Next en
+    
+    Return -1
+EndFunction
+
+Function PLY_CheckCollisionEnemyBullet(objID)
+    obj.PLY = ConvertToType(objID)
+    For enb.BULLET = Each BULLET
+        If ImagesCollide(obj\img,obj\x,obj\y,0, enb\img,enb\x,enb\y,0) Then
+            Return 1
+        EndIf
+    Next enb
+    
+    Return 0
+EndFunction

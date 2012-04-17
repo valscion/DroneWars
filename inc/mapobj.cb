@@ -1,0 +1,105 @@
+Type MAPOBJ
+    Field id As Byte
+    Field x As Float
+    Field y As Float
+
+    Field wd_what As String
+    Field wd_what_id As integer
+    
+    Field nd_what As String
+    Field nd_what_id As integer
+    Field nd_what_many As integer
+    
+    Field img As integer
+    
+    Field frame As integer
+    
+    Field ftimer As integer
+    
+    Field health As Float
+EndType
+
+Function MAPOBJ_Init(mapID)
+    file$="ini\mapobj.ini"
+    For dt.DATA_TILE = Each DATA_TILE
+        If dt\id>=150 And dt\id<=250 Then
+            mobj.MAPOBJ = New(MAPOBJ)
+            mobj\id=dt\id-150
+            mobj\x=dt\x
+            mobj\y=dt\y
+            section$="map"+mapID+" obj"+mobj\id
+            whenDestroyed$=iniReadString(file,section,"whenDestroyed")
+            needs$=iniReadString(file,section,"needs")
+            mobj\health=iniReadInt(file,section,"health")
+            
+            img$=iniReadString(file,section,"img")
+            mobj\img=0
+            If img<>"" Then mobj\img=LoadAnimImage(img,16,16,0,4)
+            
+            mobj\wd_what = GetWord2(whenDestroyed,1,":")
+            mobj\wd_what_id = Int(GetWord2(whenDestroyed,2,":"))
+            
+            mobj\nd_what = GetWord2(needs,1,":")
+            mobj\nd_what_id = GetWord2(needs,2,":")
+            mobj\nd_what_many = GetWord2(needs,3,":")
+        EndIf
+    Next dt
+EndFunction
+
+Function MAPOBJ_Update()
+    _first=1
+    _speed=250
+    For mobj.MAPOBJ = Each MAPOBJ
+        If mobj\x+gCameraX+16>0 And mobj\x+gCameraX-16<SW And mobj\y+gCameraY+16>0 And mobj\y+gCameraY-16<SH
+            For ply1.PLY = Each PLY
+                ray = Not(CastRay(mobj\x+8,mobj\y+8,ply1\x+8,ply1\y+8,16))
+            Next ply1
+
+            If mobj\img>0 And ray Then
+                DrawImage mobj\img, mobj\x+gCameraX-8, mobj\y+gCameraY-8, mobj\frame
+        
+                If Timer() > mobj\ftimer Then
+                    mobj\ftimer=Timer()+_speed
+                    If mobj\frame >= 2 Then mobj\frame=0 Else mobj\frame+1
+                EndIf
+            EndIf
+
+            Select mobj\wd_what
+                Case "unlocks"
+                    For b.BULLET = Each BULLET
+                        If b\alive And b\friendly Then
+                            If ImagesCollide(mobj\img,mobj\x-8,mobj\y-8,0, _bullet_Images(b\id,b\image_ang),b\x,b\y,0) Then
+                                b\alive=False
+                                mobj\health=mobj\health-b\dam
+                                PlayGameSound(SOUND_HIT1, mobj\x,mobj\y)
+                            EndIf
+                        EndIf
+                    Next b
+                    If mobj\health<=0.0 Then
+                        For mobj2.MAPOBJ = Each MAPOBJ
+                            If mobj2\nd_what="obj" And mobj2\nd_what_id=mobj\id Then
+                                mobj2\nd_what_many-1
+                                If mobj2\nd_what_many<=0 Then
+                                    If _first Then PlayGameSound(SOUND_MOBJDIE2):_first=0
+                                    Delete mobj2
+                                EndIf
+                            EndIf
+                        Next mobj2
+                        PlayGameSound(SOUND_MOBJDIE1)
+                        Delete mobj
+                        Exit
+                    EndIf
+            EndSelect
+            
+            Select mobj\nd_what
+                Case "ene"
+                    If gEnemiesKilled>=mobj\nd_what_many Then
+                        'If mobj2\nd_what_many<=0 Then
+                            If _first Then PlayGameSound(SOUND_MOBJDIE2):_first=0
+                            Delete mobj
+                        'EndIf
+                    EndIf
+            EndSelect
+        EndIf
+    Next mobj
+EndFunction

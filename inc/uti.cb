@@ -1,0 +1,900 @@
+Const FONT_NORMAL = 0
+Const FONT_CONSOLE = 1
+
+Dim aFont(2)
+aFont(FONT_NORMAL)=LoadFont("Tahoma",9)
+aFont(FONT_CONSOLE)=LoadFont("Tahoma",12,1)
+
+
+
+Global loaded#,gTotalItems#
+Function UpdateLoading(what As String)
+    prog#=loaded/gTotalItems*100.0
+    _line$="Loading "+what '+"..."
+    Color 255,255,255
+    CenterText SW/2,SH/2-14,_line
+    loaded+1
+    Color 128,128,200
+    Box SW/2-50,SH/2,prog,12
+    Color 255,255,255
+    Box SW/2-50,SH/2,100,12,0
+    'DrawGame
+    PositionCamera 320, -240
+    For i = 240 To 0 Step -1
+        CopyBox 0, i, 320, 2, 0, i*2
+    Next i
+    
+    For i = 320 To 0 Step -1
+        CopyBox i,0,2,480,i*2,0
+    Next i
+    DrawScreen
+EndFunction
+
+UpdateLoading("something..")
+loaded=loaded-1
+
+Function GetNExp(level#)
+    Return Int(level*100*(1+(level/7)))
+EndFunction
+
+Global gNumberImage
+gNumberImage = LoadImage("gfx\numbers.png")
+Function DrawLevel(x,y,level)
+    lev$=Flip(Str(level))
+    For i=1 To Len(lev)
+        pos=Int(Mid(lev,i,1))
+        DrawImageBox gNumberImage,x-(5*(i-1)),y,5*pos,0,5,7
+    Next i
+EndFunction
+
+Global zoomed_screen_a,zoomed_screen
+zoomed_screen_a = MakeImage(ScreenWidth(), ScreenHeight())
+zoomed_screen 	= MakeImage(ScreenWidth(), ScreenHeight())
+MaskImage zoomed_screen_a, 255, 0, 254
+MaskImage zoomed_screen, 255, 0, 254
+Function BlockyScreen(blockynes,disrupt#)
+	For y=0 To ScreenHeight() / 2
+		CopyBox 0, y/blockynes*blockynes, 640, 1, 0, y*2, SCREEN(), Image(zoomed_screen_a)
+		CopyBox 0, (y+1)/blockynes*blockynes, 640, 1, 0, y*2+1, SCREEN(), Image(zoomed_screen_a)
+	Next y
+	For x=0 To ScreenWidth() / 2
+		CopyBox x/blockynes*blockynes,  Int( (Sin(x + t*0.01)*disrupt#) ), 1, 480, x*2, 0, Image(zoomed_screen_a), Image(zoomed_screen)
+		CopyBox x/blockynes*blockynes, -Int( (Sin(x + t*0.01)*disrupt#) ), 1, 480, x*2+1, 0, Image(zoomed_screen_a), Image(zoomed_screen)
+	Next x
+	DrawImage zoomed_screen, 0, 0
+EndFunction
+    
+Function iniReadString$(file As String, section As String, name As String, defaultValue As String = "")
+   Dim f As Integer
+   Dim row As String, currentSection As String
+   
+   name = Lower(name)
+   section = Lower(section)
+   
+   If FileExists(file) Then
+      f = OpenToRead(file)
+         While Not EOF(f)
+            row = Trim(ReadLine(f))
+            
+            // Parsitaan kommentit pois.
+            If InStr(row, ";") Then
+               row = Mid(row, 1, InStr(row, ";") - 1)
+            EndIf
+            
+            If row <> "" Then
+               If Left(row, 1) = "[" Then // Jos ON osio niin vaihdetaan nykyisen osion nimi.
+                  currentSection = Lower(Mid(row, 2, InStr(row, "]") - 2))
+               Else // Muussa tapauksessa rivillä ON asetuksia.
+                  If Lower(Left(row, Len(name))) = name And currentSection = section Then
+                     Return Replace(Trim(Mid(row, InStr(row, "=") + 1)), Chr(34), "")
+                  EndIf
+               EndIf
+            EndIf
+         Wend
+      CloseFile f
+   Else
+      MakeError "Tiedoston '" + file + "' avaus epäonnistui!"
+   EndIf
+   Return defaultValue
+EndFunction
+
+Function iniReadInt(file As String, section As String, name As String, defaultValue As Integer = 0)
+   Return Int(iniReadString(file, section, name, defaultvalue))
+EndFunction
+
+Function iniReadFloat(file As String, section As String, name As String, defaultValue As Float = 0.0)
+   Return Float(iniReadString(file, section, name, defaultValue))
+EndFunction 
+
+Global gPauseMenu_MaxButtons, gDropMenuY#,gInfoMenuY#, gShowInfo
+Global gPause_Image
+
+gShowInfo=true
+gPauseMenu_MaxButtons=4
+If Not gPause_Image Then gPause_Image = MakeImage(640,480):MaskImage gPause_Image,254,0,254
+
+Function PauseLoop()
+    StopAllSounds()
+    BlockyScreen(2,0)
+    DrawScreen OFF
+    CopyBox 0,0,640,480,0,0,SCREEN(),Image(gPause_Image)
+    DrawImage ScaleImage(gPause_Image,321,241),0,0
+    
+    For ply1.PLY = Each PLY
+        h= (ply1\h/100)*17
+        arm= (ply1\arm/100)*17
+        shi= (ply1\shi/100)*17
+        If SoundPlaying(ply1\thrust) Then StopSound ply1\thrust
+        _wepon.WEP = ConvertToType(ply1\weapon)
+        dam#=_wepon\dam
+        lev=ply1\lev
+        exp#=ply1\exp
+        nexp#=ply1\nexp
+    Next ply1
+    
+    Repeat
+        weCameBack:
+        DrawImage ScaleImage(gPause_Image,320,240),0,0
+        
+        
+        gPauseMusicVolume=CurveValue(0,gPauseMusicVolume,5)
+        SetSound gMusic,0,gPauseMusicVolume
+        
+        If KeyHit(cbKeyUp)      Then selection-1:PlayGameSound(SOUND_MENU1)
+        If KeyHit(cbKeyDown)    Then selection+1:PlayGameSound(SOUND_MENU1)
+        
+        If selection>gPauseMenu_MaxButtons-1 Then selection=0
+        If selection<0                       Then selection=gPauseMenu_MaxButtons-1
+        
+        If KeyHit(cbKeyReturn)
+            Select selection
+                Case 0 'CONTINUE
+                    SetSound gMusic,0,gMsxVolume
+                    PlayGameSound(SOUND_SELECT)
+                    Return 0
+                Case 1 'OPTIONS
+                    goingToOptions=1:PlayGameSound(SOUND_SELECT)
+                Case 2 'MAIN MENU
+                    'Mene main menuun
+                Case 3 'QUIT
+                    End
+            EndSelect
+        EndIf
+        
+        // HUD_PANEL vvvv
+        DrawImage gHudPanel,SW-ImageWidth(gHudPanel),3
+        DrawImageBox gHudIndicators, SW-127,6, 0,0,h*5,10
+        DrawImageBox gHudIndicators, SW-127,16, 0,10,arm*5,10
+        DrawImageBox gHudIndicators, SW-127,26, 0,20,shi*5,10
+        // HUD_PANEL ^^^^
+        
+        gDropMenuY=CurveValue(112-gInfoMenuY,gDropMenuY,3)
+        dropOff_Y#=gDropMenuY+gInfoMenuY
+        DrawImageBox gDropOff, SW-97,40, 0,112-(dropOff_Y), 65,dropOff_Y
+        
+        If dropOff_Y>111.9 Then
+            For i=0 To gPauseMenu_MaxButtons-1
+                If selection=i Then DrawImageBox gDropOn,SW-97,58+i*8, 0,18+i*8, 65,8
+            Next i
+            
+            Color 0,128,0
+            x=SW-87
+            Line x,61+56,x+Int(dam/15.0*40.0),61+56
+            
+            DrawLevel(x+36,65+56,lev)
+
+            Line x,81+56,x+Int(exp/nexp*40.0),81+56
+        EndIf
+        
+        If goingToOptions Then goingToOptions=OptionsLoop()
+        If goingToOptions=-1 Then goingToOptions=0:Goto weCameBack
+        
+        DrawGame
+        PositionCamera 320, -240
+        For i = 240 To 0 Step -1
+            CopyBox 0, i, 320, 2, 0, i*2
+        Next i
+        
+        For i = 320 To 0 Step -1
+            CopyBox i,0,2,480,i*2,0
+        Next i
+        DrawScreen
+
+    Forever
+EndFunction
+
+Global gOptions_Image, gOptions_Back, gOptions_Shadow
+If Not gOptions_Image Then gOptions_Image = MakeImage(640,480):MaskImage gOptions_Image,254,0,254
+If Not gOptions_Back Then gOptions_Back = LoadImage("gfx\options_back.png"):MaskImage gOptions_Back,255,0,255
+If Not gOptions_Shadow Then
+    gOptions_Shadow = MakeImage(320,240)
+    MaskImage gOptions_Shadow,255,255,255
+    DrawToImage gOptions_Shadow
+        Color 0,0,0
+        Box 0,0,320,240
+    DrawToScreen
+EndIf
+
+Global gDisplayModes As String, mode_selection As integer, gFullscreen As integer
+
+Function InitOptions()
+    tmp1=MakeMEMBlock(4)
+    tmp2=MakeMEMBlock(4)
+    PokeInt tmp1,0,1337
+    CallDLL "getModes.dll" , "CB_getModes", tmp1, tmp2
+    Print PeekInt(tmp2,0)
+    f=OpenToRead("DisplayModes.txt")
+        gDisplayModes=""
+        While Not EOF(f)
+            gDisplayModes=gDisplayModes+ReadLine(f)+"|"
+        Wend
+    CloseFile f
+EndFunction
+
+Function OptionsLoop(from_menu=0)
+    BlockyScreen(2,0)
+    DrawScreen OFF
+    CopyBox 0,0,640,480,0,0,SCREEN(),Image(gOptions_Image)
+    DrawImage ScaleImage(gOptions_Image,321,241),0,0
+    
+    Dim button(5)
+    button(0)=ImageFontText("sound:",1)
+    button(1)=ImageFontText("music:",1)
+    button(2)=ImageFontText("<customize keys>",1)
+    button(3)=ImageFontText("change resolution:",1)
+    button(4)=ImageFontText("<save settings>",1)
+    
+    
+    InitOptions()
+    modesCount = Int(CountWords(gDisplayModes,"|"))-1
+    Dim modes(modesCount) As Integer
+    For i=1 To modesCount
+        modes(i-1)=ImageFontText(GetWord(gDisplayModes,i,"|"),1)
+        'modes(i-1,1)=ImageFontText("F: "+GetWord(gDisplayModes,i,"|"),1)
+    Next i
+    mode_selection=0
+    gFullscreen=Not iniReadInt(CONFIG_INI,"display","mode")
+    
+    
+    // Curve loop
+    options_again:
+    y#=-160.0
+    While y<=0
+        DrawImage ScaleImage(gOptions_Image,320,240),0,0
+        DrawImage gOptions_Back,20,y
+        y=CurveValue(1,y,3)
+        
+        // Double-pix-shit
+        DrawGame
+        PositionCamera 320, -240
+        For i = 240 To 0 Step -1
+            CopyBox 0, i, 320, 2, 0, i*2
+        Next i
+        
+        For i = 320 To 0 Step -1
+            CopyBox i,0,2,480,i*2,0
+        Next i
+        DrawScreen
+    Wend
+    
+    // The actual Options-loop
+    Repeat
+        DrawImage ScaleImage(gOptions_Image,320,240),0,0
+        DrawImage gOptions_Back,20,y
+        
+        If KeyHit(cbKeyUp)      Then selection-1:PlayGameSound(SOUND_MENU1)
+        If KeyHit(cbKeyDown)    Then selection+1:PlayGameSound(SOUND_MENU1)
+        
+        If selection>4 Then selection=0
+        If selection<0 Then selection=4
+        
+        For i=0 To 3
+            img=button(i)
+            iw=ImageWidth(img)
+            ih=ImageHeight(img)
+
+            If selection=i Then
+                Color cbDarkBlue
+                If selection=3 Then
+                    Box 34,85+(i*ih),iw,ih*2
+                Else
+                    Box 34,85+(i*ih),iw,ih
+                EndIf
+            EndIf
+            
+            DrawImage img, 34,85+(i*ih)
+        Next i
+        
+        If selection=4 Then
+            img=button(4)
+            iw=ImageWidth(img)
+            ih=ImageHeight(img)
+            Color cbDarkBlue
+            Box 34,136,iw,ih
+        EndIf
+        DrawImage button(4), 34,136
+        
+        Color cbLightBlue
+        Box 84,86,60,3
+        Box 84,96,60,3
+        Color cbDarkBlue
+        sfx#=gSfxVolume
+        msx#=gMsxVolume
+        Box 84.0+sfx/100.0*59.0,85,3,5
+        Box 84.0+msx/100.0*59.0,95,3,5
+        
+        DrawImage modes(mode_selection),44,120
+        
+        Select selection
+            Case 0 'CONTINUE
+                gSfxVolume=Min(100,Max(0,gSfxVolume+(KeyDown(cbKeyRIGHT)-KeyDown(cbKeyLEFT))))
+                If KeyUp(cbKeyRIGHT) Or KeyUp(cbKeyLEFT) Then PlayGameSound(SOUND_MENU1)
+            Case 1 'OPTIONS
+                gMsxVolume=Min(100,Max(0,gMsxVolume+(KeyDown(cbKeyRIGHT)-KeyDown(cbKeyLEFT))))
+                If KeyUp(cbKeyRIGHT) Or KeyUp(cbKeyLEFT) Then PlayGameSound(SOUND_MENU1)
+                If from_menu Then SetSound gMusic,0,gMsxVolume
+            Case 2 'MAIN MENU
+                If KeyHit(cbKeyReturn) Then
+                    ClearKeys:PlayGameSound(SOUND_SELECT)
+                    ChangeKeys()
+                EndIf
+            Case 3
+                mode_selection=Min(modesCount-1,Max(0,mode_selection+(KeyHit(cbKeyRight)-KeyHit(cbKeyLeft))))
+                'If KeyHit(cbKeyReturn) Then gFullscreen=Not gFullscreen
+                'If KeyHit(KEY_FIRE) Then
+                '    ClearKeys:PlayGameSound(SOUND_MENU2)
+                'EndIf
+            Case 4
+                If KeyHit(cbKeyReturn) Then
+                    ClearKeys:PlayGameSound(SOUND_SELECT):SaveConfig()
+                EndIf
+        EndSelect
+        
+        If KeyHit(1) Then
+            PlayGameSound(SOUND_SELECT2)
+            For i=0 To modesCount-1
+                DeleteImage modes(i)
+            Next i
+            For i=0 To 4
+                DeleteImage button(i)
+            Next i
+            While y>=-160
+                DrawImage ScaleImage(gOptions_Image,320,240),0,0
+                DrawImage gOptions_Back,20,y
+                y=CurveValue(-161,y,2)
+                
+                // Double-pix-shit
+                DrawGame
+                PositionCamera 320, -240
+                For i = 240 To 0 Step -1
+                    CopyBox 0, i, 320, 2, 0, i*2
+                Next i
+                
+                For i = 320 To 0 Step -1
+                    CopyBox i,0,2,480,i*2,0
+                Next i
+                DrawScreen
+            Wend
+            Return 0
+        EndIf
+        
+        DrawGame
+        PositionCamera 320, -240
+        For i = 240 To 0 Step -1
+            CopyBox 0, i, 320, 2, 0, i*2
+        Next i
+        
+        For i = 320 To 0 Step -1
+            CopyBox i,0,2,480,i*2,0
+        Next i
+        DrawScreen
+
+    Forever
+EndFunction
+
+Function ChangeKeys()
+    
+    Dim buttons(7)
+    buttons(0)=ImageFontText("up:",1)
+    buttons(1)=ImageFontText("down:",1)
+    buttons(2)=ImageFontText("turn left:",1)
+    buttons(3)=ImageFontText("turn right:",1)
+    buttons(4)=ImageFontText("fire:",1)
+    buttons(5)=ImageFontText("strafe left:",1)
+    buttons(6)=ImageFontText("strafe right:",1)
+    
+    maxw=ImageWidth(buttons(6))+36
+    
+    Dim keys(222)
+    For i=0 To 221
+        keys(i)=ImageFontText(KeyName(i),1)
+    Next i
+    
+    
+    Repeat
+        DrawImage ScaleImage(gOptions_Image,320,240),0,0
+        DrawImage gOptions_Back,20,y
+        
+        If KeyHit(cbKeyUp)      Then selection-1:PlayGameSound(SOUND_MENU1)
+        If KeyHit(cbKeyDown)    Then selection+1:PlayGameSound(SOUND_MENU1)
+        
+        If selection>6 Then selection=0
+        If selection<0 Then selection=6
+        
+        For i=0 To 6
+            img=buttons(i)
+            iw=ImageWidth(img)
+            ih=ImageHeight(img)
+
+            If selection=i Then
+                Color cbDarkBlue
+                Box 34,85+(i*ih),iw,ih
+            EndIf
+            
+            DrawImage img, 34,85+(i*ih)
+        Next i
+        
+        DrawImage keys(KEY_UP),maxw,85
+        DrawImage keys(KEY_DOWN),maxw,85+ih
+        DrawImage keys(KEY_TURN_L),maxw,85+ih*2
+        DrawImage keys(KEY_TURN_R),maxw,85+ih*3
+        DrawImage keys(KEY_FIRE),maxw,85+ih*4
+        DrawImage keys(KEY_STRAFE_L),maxw,85+ih*5
+        DrawImage keys(KEY_STRAFE_R),maxw,85+ih*6
+        
+        Select selection
+            Case 0 'CONTINUE
+                If KeyHit(cbKeyReturn) Then
+                    ClearKeys:PlayGameSound(SOUND_SELECT)
+                    KEY_UP=WaitKey()
+                    PlayGameSound(SOUND_MENU1)
+                EndIf
+            Case 1 'OPTIONS
+                If KeyHit(cbKeyReturn) Then
+                    ClearKeys:PlayGameSound(SOUND_SELECT)
+                    KEY_DOWN=WaitKey()
+                    PlayGameSound(SOUND_MENU1)
+                EndIf
+            Case 2 'MAIN MENU
+                If KeyHit(cbKeyReturn) Then
+                    ClearKeys:PlayGameSound(SOUND_SELECT)
+                    KEY_TURN_L=WaitKey()
+                    PlayGameSound(SOUND_MENU1)
+                EndIf
+            Case 3
+                If KeyHit(cbKeyReturn) Then
+                    ClearKeys:PlayGameSound(SOUND_SELECT)
+                    KEY_TURN_R=WaitKey()
+                    PlayGameSound(SOUND_MENU1)
+                EndIf
+            Case 4
+                If KeyHit(cbKeyReturn) Then
+                    ClearKeys:PlayGameSound(SOUND_SELECT)
+                    KEY_FIRE=WaitKey()
+                    PlayGameSound(SOUND_MENU1)
+                EndIf
+            Case 5
+                If KeyHit(cbKeyReturn) Then
+                    ClearKeys:PlayGameSound(SOUND_SELECT)
+                    KEY_STRAFE_LEFT=WaitKey()
+                    PlayGameSound(SOUND_MENU1)
+                EndIf
+            Case 6
+                If KeyHit(cbKeyReturn) Then
+                    ClearKeys:PlayGameSound(SOUND_SELECT)
+                    KEY_STRAFE_RIGHT=WaitKey()
+                    PlayGameSound(SOUND_MENU1)
+                EndIf
+        EndSelect
+        
+        If KeyHit(1) Then
+            ClearKeys:PlayGameSound(SOUND_SELECT2)
+            Return 0
+        EndIf
+        
+        DrawGame
+        PositionCamera 320, -240
+        For i = 240 To 0 Step -1
+            CopyBox 0, i, 320, 2, 0, i*2
+        Next i
+        
+        For i = 320 To 0 Step -1
+            CopyBox i,0,2,480,i*2,0
+        Next i
+        DrawScreen
+
+    Forever
+EndFunction
+
+Global gScaledImage
+gScaledImage = MakeImage(1, 1)
+Function ScaleImage(_image, _width, _height)
+   //By: Marcoder
+
+   // Jos koko ei ole muuttunut niin ei tehdä mitään
+   If _width = ImageWidth(gScaledImage) And _height = ImageHeight(gScaledImage) Then Return gScaledImage
+   If _width <= 0 Or _height <= 0 Then Return gScaledImage
+   
+   DeleteImage gScaledImage
+   gScaledImage = MakeImage(_width, _height)
+   MaskImage gScaledImage,254,0,254
+   
+   // Tehdään temppikuva johon skaalataan ensin vain leveys
+   lTempImage = MakeImage(_width, ImageHeight(_image))
+   MaskImage lTempImage,254,0,254
+   DrawToImage lTempImage
+   For x = 0 To _width - 1
+       sx# = Float(ImageWidth(_image)) / Float(_width) * Float(x)
+       DrawImageBox _image, x, 0, sx, 0, 1, ImageHeight(_image)
+   Next x
+   DrawToScreen
+   
+   // Skaalataan myös pystysuunnassa
+   DrawToImage gScaledImage
+   For y = 0 To _height - 1
+       sy# = Float(ImageHeight(_image)) / Float(_height) * Float(y)
+       DrawImageBox lTempImage, 0, y, 0, sy, ImageWidth(lTempImage), 1
+   Next y
+   DrawToScreen
+   DeleteImage lTempImage
+
+   Return gScaledImage
+End Function
+
+
+Function MaskImage2(img)
+    PickImageColor img,0,0
+    MaskImage img,getRGB(RED),getRGB(GREEN),getRGB(BLUE)
+    Return img
+EndFunction
+
+Function Approx(num1#,num2#,lo#,hi#)
+    If num1 < num2+hi And num1 > num2-lo Then Return True Else Return False
+End Function
+
+Global gCastX#, gCastY#
+Function CastRay(origX1#, origY1#, origX2#, origY2#, tileSize = 32)
+    // Pisteiden normalisaatio
+    x1# = origX1 / tileSize
+    y1# = origY1 / tileSize
+    x2# = origX2 / tileSize
+    y2# = origY2 / tileSize
+
+    If RoundDown(x1) = RoundDown(x2) And RoundDown(y1) = RoundDown(y2) Then
+        // Ei ylitä minkään laatan rajoja, joten ei voi olla törmäystä.
+        // Asetetaan loppupiste muuttujiin gCastX ja gCastY
+        gCastX = origX2
+        gCastY = origY2
+        Return False
+    EndIf
+    
+    // Kumpaan suuntaan mennään x- ja y-suunnassa
+    If x2 > x1 Then stepX = 1 Else stepX = -1
+    If y2 > y1 Then stepY = 1 Else stepY = -1
+    
+    // Säteen suunta
+    rayDirX# = x2 - x1
+    rayDirY# = y2 - y1
+    
+    // find out how far to move on each axis for every whole integer step on the other
+    ratioX# = rayDirX / rayDirY
+    ratioY# = rayDirY / rayDirX
+    
+    deltaY# = x2 - x1
+    deltaX# = y2 - y1
+    
+    deltaX = Abs(deltaX)
+    deltaY = Abs(deltaY)
+    
+    // initialize the integer test coordinates with the coordinates of the starting tile, in tile space ( integer )
+	// Note: using normalized versions of x1 & y1
+    testX = RoundDown(x1)
+    testY = RoundDown(y1)
+        
+    // initialize the non-integer step, by advancing to the next tile boundary / ( whole integer of opposing axis )
+	// If moving in positive direction, move to end of curent tile, otherwise the beginning
+    If stepX > 0 Then
+        maxX# = deltaX * (1.0 - (x1 Mod 1))
+    Else
+        maxX# = deltaX * (x1 Mod 1)
+    EndIf
+    If stepY > 0 Then
+        maxY# = deltaY * (1.0 - (y1 Mod 1))
+    Else
+        maxY# = deltaY * (y1 Mod 1)
+    EndIf
+    
+    endTileX = RoundDown(x2)
+    endTileY = RoundDown(y2)
+    
+    // Nyt liikutaan!
+    hit = False
+    colX# = 0.0
+    colY# = 0.0
+    
+    While (testX <> endTileX Or testY <> endTileY)
+        If maxX < maxY Then
+            maxX = maxX + deltaX
+            testX = testX + stepX
+            
+            If testX >= 0 And testX <= gMapWidth-1 Then
+                hit = MAP_GetTileID2(testX, testY,2)
+            Else
+                hit = 1
+            EndIf
+            If hit Then
+                colX = testX
+                If stepX < 0 Then colX = colX + 1.0 // Add one if going left
+                colY = y1 + ratioY * (colX - x1)
+                colX = colX * tileSize // Scale up
+                colY = colY * tileSize
+                gCastX = colX
+                gCastY = colY
+                Return True
+            EndIf
+        Else
+            maxY = maxY + deltaY
+            testY = testY + stepY
+            
+            If testY >= 0 And testY <= gMapHeight-1 Then
+                hit = MAP_GetTileID2(testX, testY,2)
+            Else
+                hit = 1
+            EndIf
+            If hit Then
+                colY = testY
+                If stepY < 0 Then colY = colY + 1.0 // Add one if going up
+                colX = x1 + ratioX * (colY - y1)
+                colX = colX * tileSize // Scale up
+                colY = colY * tileSize
+                gCastX = colX
+                gCastY = colY
+                Return True
+            EndIf
+        EndIf
+    Wend
+    
+    // Ei löydetty törmäystä, palautetaan loppupiste
+    gCastX = origX2
+    gCastY = origY2
+    Return False
+EndFunction
+
+
+Function KeyName$(Key)
+    Select Key
+        Case 1 : Return "Escape"
+        Case 2 : Return "1"
+        Case 3 : Return "2"
+        Case 4 : Return "3"
+        Case 5 : Return "4"
+        Case 6 : Return "5"
+        Case 7 : Return "6"
+        Case 8 : Return "7"
+        Case 9 : Return "8"
+        Case 10 : Return "9"
+        Case 11 : Return "0"
+        Case 12 : Return "+"
+        Case 13 : Return "´"
+        Case 14 : Return "Backspace"
+        Case 15 : Return "Tab"
+        Case 16 : Return "Q"
+        Case 17 : Return "W"
+        Case 18 : Return "E"
+        Case 19 : Return "R"
+        Case 20 : Return "T"
+        Case 21 : Return "Y"
+        Case 22 : Return "U"
+        Case 23 : Return "I"
+        Case 24 : Return "O"
+        Case 25 : Return "P"
+        Case 26 : Return "Å"
+        Case 27 : Return "^"
+        Case 28 : Return "Enter"
+        Case 29 : Return "Left control"
+        Case 30 : Return "A"
+        Case 31 : Return "S"
+        Case 32 : Return "D"
+        Case 33 : Return "F"
+        Case 34 : Return "G"
+        Case 35 : Return "H"
+        Case 36 : Return "J"
+        Case 37 : Return "K"
+        Case 38 : Return "L"
+        Case 39 : Return "Ö"
+        Case 40 : Return "Ä"
+        Case 41 : Return "§"
+        Case 42 : Return "Left Shift"
+        Case 43 : Return "'"
+        Case 44 : Return "Z"
+        Case 45 : Return "X"
+        Case 46 : Return "C"
+        Case 47 : Return "V"
+        Case 48 : Return "B"
+        Case 49 : Return "N"
+        Case 50 : Return "M"
+        Case 51 : Return ","
+        Case 52 : Return "."
+        Case 53 : Return "-"
+        Case 54 : Return "Right shift"
+        Case 55 : Return "Num *"
+        Case 56 : Return "Left alt"
+        Case 57 : Return "Space"
+        Case 58 : Return "Caps lock"
+        Case 59 : Return "F1"
+        Case 60 : Return "F2"
+        Case 61 : Return "F3"
+        Case 62 : Return "F4"
+        Case 63 : Return "F5"
+        Case 64 : Return "F6"
+        Case 65 : Return "F7"
+        Case 66 : Return "F8"
+        Case 67 : Return "F9"
+        Case 68 : Return "F10"
+        Case 69 : Return "Pause"
+        Case 70 : Return "Scroll lock"
+        Case 71 : Return "Num 7"
+        Case 72 : Return "Num 8"
+        Case 73 : Return "Num 9"
+        Case 74 : Return "Num -"
+        Case 75 : Return "Num 4"
+        Case 76 : Return "Num 5"
+        Case 77 : Return "Num 6"
+        Case 78 : Return "Num +"
+        Case 79 : Return "Num 1"
+        Case 80 : Return "Num 2"
+        Case 81 : Return "Num 3"
+        Case 82 : Return "Num 0"
+        Case 83 : Return "Num ,"
+
+        Case 87 : Return "F11"
+        Case 88 : Return "F12"
+
+        Case 156 : Return "Num enter"
+        Case 157 : Return "Right control"
+        Case 181 : Return "Num /"
+        Case 184 : Return "Right alt"
+        Case 197 : Return "Num lock"
+        Case 199 : Return "Home"
+        Case 200 : Return "Up"
+        Case 201 : Return "Page up"
+        Case 203 : Return "Left"
+        Case 205 : Return "Right"
+        Case 207 : Return "End"
+        Case 208 : Return "Down"
+        Case 209 : Return "Page down"
+        Case 210 : Return "Insert"
+        Case 211 : Return "Delete"
+        Case 219 : Return "Left windows"
+        Case 220 : Return "Right windows"
+        Case 221 : Return "Special"
+'        Case  : Return ""
+        Default : Return "SC: " + Key
+    End Select
+End Function
+
+Function iniWrite(file$,label$,name$,value$,CaseSensitive=0)
+    namelen=Len(name$)
+    
+    If FileExists(file$) Then f=OpenToRead(file$) Else f=OpenToEdit(file$)
+    
+    f2=OpenToWrite(file$+"temp")
+    
+        While Not EOF(f)
+        
+        
+            l$=ReadLine(f)
+            
+            rl$=l$
+            l$=Trim(l$)
+            
+            If Not finish Then 
+    
+                lines=lines+1
+                
+                firstchar$=Left(l$,1)
+                
+                If label$<>"" And rightlabel=0 And finish=0 Then 
+                    If firstchar$="[" Then 
+     
+                        labelending = InStr(l$,"]",1)
+                        If Not labelending Then MakeError "Error: WriteIni could not read file: "+file$+" Label "+label$+" not ended with ] at line: "+lines
+                        If CaseSensitive Then 
+                            If Mid(l$,2,labelending-2)=label$ Then Rightlabel=1
+                        Else
+                            If Lower(Mid(l$,2,labelending-2))=Lower(label$) Then Rightlabel=1
+                        EndIf 
+                    EndIf 
+                ElseIf rightlabel And finish=0 Then 
+                
+                    //new label starting
+                    If firstchar$="[" Then finish=1
+
+                    If firstchar$="#" Then 
+                        //commentline
+                    Else
+                        If CaseSensitive Then 
+                            If Mid(l$,1,namelen)=name$ Then finish=1
+                        Else
+                            If Mid(l$,1,namelen)=name$ Then finish=1
+                        EndIf 
+                    EndIf 
+                
+                    If EOF(f) Then finish=1 
+                    
+                EndIf 
+
+                If Not finish Then 
+                    WriteLine f2,rl$
+                Else
+                    If name$+"="+value$<>l$ Then
+                        WriteLine f2,name$+"="+value$ 
+                    Else
+                        WriteLine f2,rl$
+                    EndIf
+                EndIf 
+
+            Else 
+                WriteLine f2,rl$
+            EndIf 
+            
+            
+        Wend 
+        
+        If Not finish Then 
+            WriteLine f2,"["+label$+"]"
+            WriteLine f2,name$+"="+value$
+        EndIf 
+        CloseFile f2
+
+    CloseFile f
+    
+    CopyFile file$+"temp",file$
+    If FileExists (file$+"temp") Then DeleteFile file$+"temp"
+
+End Function 
+
+
+
+
+Function SaveConfig()
+    '[display]
+    'width=960
+    'height=720
+    'depth=0
+    'mode=1
+    
+    '[sound]
+    'sfxvol=60 ;sound fx volume (max 100)
+    'msxvol=60 ;music volume (max 100)
+    
+    '[keys]
+    'left=30
+    'right=32
+    'up=17
+    'down=31
+    'fire=57
+    
+    'iniWrite(file$,label$,name$,value$
+    
+    _mode$=GetWord(gDisplayModes,mode_selection,"|")
+    width=GetWord(_mode,1,",")
+    height=GetWord(_mode,2,",")
+    depth=32
+    mode=gFullscreen
+    iniWrite(CONFIG_INI,"display","width", width)
+    iniWrite(CONFIG_INI,"display","height", height)
+    iniWrite(CONFIG_INI,"display","depth", depth)
+    iniWrite(CONFIG_INI,"display","mode", Not mode)
+    
+    iniWrite(CONFIG_INI,"sound", "sfxvol", gSfxVolume)
+    iniWrite(CONFIG_INI,"sound", "msxvol", gMsxVolume)
+    
+    iniWrite(CONFIG_INI,"keys", "left", KEY_TURN_L)
+    iniWrite(CONFIG_INI,"keys", "right", KEY_TURN_R)
+    iniWrite(CONFIG_INI,"keys", "up", KEY_UP)
+    iniWrite(CONFIG_INI,"keys", "down", KEY_DOWN)
+    iniWrite(CONFIG_INI,"keys", "fire", KEY_FIRE)
+    iniWrite(CONFIG_INI,"keys", "strafel", KEY_STRAFE_L)
+    iniWrite(CONFIG_INI,"keys", "strafer", KEY_STRAFE_R)
+EndFunction
